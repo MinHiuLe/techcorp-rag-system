@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # 1. Object Storage (Data Lake)
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console UI
+    environment:
+      MINIO_ROOT_USER: hieule
+      MINIO_ROOT_PASSWORD: hieule123
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./storage/minio_data:/data
+    restart: always
+
+  # 2. Cơ sở dữ liệu Vector Qdrant
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./storage/qdrant_data:/qdrant/storage
+    restart: always
+
+  # 3. Bộ não AI (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=hieule
+      - MINIO_SECRET_KEY=hieule123
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env
+    depends_on:
+      - qdrant
+      - minio
+    restart: always
+
+  # 4. Giao diện người dùng (Streamlit)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000/chat
+    depends_on:
+      - api
+    restart: always

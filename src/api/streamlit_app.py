@@ -1,0 +1,71 @@
+import streamlit as st
+import requests
+import time
+import os
+# Cấu hình trang
+st.set_page_config(
+    page_title="TechCorp AI Assistant",
+    page_icon="🤖",
+    layout="centered"
+)
+
+# Đường dẫn API Backend
+API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
+
+st.title("🤖 TechCorp IT Onboarding")
+st.markdown("---")
+
+# Khởi tạo bộ nhớ chat trong session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Sidebar để quản lý phiên làm việc
+with st.sidebar:
+    st.header("Cấu hình")
+    session_id = st.text_input("Session ID", value="user_123")
+    if st.button("Xóa lịch sử Chat"):
+        requests.delete("http://localhost:8000/chat/memory")
+        st.session_state.messages = []
+        st.rerun()
+    
+    st.info("Hệ thống sử dụng Llama-3-70B & Hybrid Search để cung cấp câu trả lời chính xác nhất từ tài liệu nội bộ.")
+
+# Hiển thị lịch sử chat
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Xử lý input từ người dùng
+if prompt := st.chat_input("Hỏi tôi về quy trình IT, Docker, Jira..."):
+    # Hiển thị tin nhắn người dùng
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Gửi request tới FastAPI backend
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        message_placeholder.markdown("🔍 *Đang truy vấn tài liệu...*")
+        
+        try:
+            payload = {"query": prompt, "session_id": session_id}
+            response = requests.post(API_URL, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                full_response = data["answer"]
+                latency = data["latency_seconds"]
+                
+                # Hiển thị câu trả lời
+                message_placeholder.markdown(full_response)
+                
+                # Hiển thị thông số kỹ thuật (Latency) dưới dạng nhỏ gọn
+                st.caption(f"⏱️ Thời gian xử lý: {latency} giây")
+                
+                # Lưu vào lịch sử
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+            else:
+                st.error(f"Lỗi hệ thống: {response.status_code}")
+                
+        except Exception as e:
+            st.error(f"Không thể kết nối tới Backend: {str(e)}")

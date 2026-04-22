@@ -1,0 +1,16 @@
+# Bỏ qua môi trường ảo
+venv/
+env/
+.env
+
+# Bỏ qua data local
+storage/
+*.sqlite3
+*.db
+
+# Bỏ qua cache của Python và mô hình
+__pycache__/
+*.pyc
+.pytest_cache/
+.huggingface/
+.cache/

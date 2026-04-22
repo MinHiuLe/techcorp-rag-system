@@ -1,0 +1,42 @@
+[
+  {
+    "question": "TechCorp quy định sử dụng những base image nào cho Docker?",
+    "ground_truth": "Chỉ được phép sử dụng các base image an toàn: alpine, debian:slim, ubuntu LTS. Không dùng image không rõ nguồn gốc và không dùng tag 'latest' trong production."
+  },
+  {
+    "question": "Có được phép chạy Docker container với quyền root không?",
+    "ground_truth": "Không. Quy tắc bắt buộc trong Dockerfile Standards của TechCorp yêu cầu không chạy root user trong container."
+  },
+  {
+    "question": "Quy trình cấp quyền Jira gồm những bước nào?",
+    "ground_truth": "Gồm 5 bước: 1) Tạo yêu cầu trên Jira Service Management, 2) Xác thực yêu cầu bởi IT Support, 3) Phê duyệt qua các cấp (Team Lead, Project Manager, Security Team), 4) Cấp quyền và ghi log, 5) Xác nhận qua email."
+  },
+  {
+    "question": "SLA cho yêu cầu cấp quyền Developer trong Jira là bao lâu?",
+    "ground_truth": "Tối đa 1 ngày làm việc."
+  },
+  {
+    "question": "Theo chính sách bảo mật, dữ liệu Confidential phải được xử lý như thế nào?",
+    "ground_truth": "Phải được mã hóa cả khi lưu trữ (at rest) và khi truyền tải (in transit) qua HTTPS/TLS. Không lưu trên máy cá nhân, không upload lên dịch vụ bên thứ ba nếu chưa được phê duyệt."
+  },
+  {
+    "question": "TechCorp có bắt buộc bật MFA không?",
+    "ground_truth": "Có. Bắt buộc bật Multi-Factor Authentication (MFA) cho tất cả nhân viên."
+  },
+  {
+    "question": "Khi nào quyền truy cập Jira bị thu hồi?",
+    "ground_truth": "Khi nhân viên rời dự án, chuyển team, kết thúc hợp đồng, hoặc phát hiện vi phạm bảo mật."
+  },
+  {
+    "question": "Ai có thể truy cập dữ liệu Confidential theo RBAC của TechCorp?",
+    "ground_truth": "Manager được truy cập toàn bộ; Engineer chỉ được truy cập một phần Confidential; Intern không được truy cập Confidential."
+  },
+  {
+    "question": "TechCorp yêu cầu logging trong container như thế nào?",
+    "ground_truth": "Logs phải ghi ra stdout / stderr, không ghi file trong container. Sử dụng centralized logging như ELK hoặc Loki."
+  },
+  {
+    "question": "Ai chịu trách nhiệm kiểm toán quyền truy cập Jira định kỳ?",
+    "ground_truth": "Security Team. Audit định kỳ mỗi tháng và báo cáo gửi Head of Engineering."
+  }
+]

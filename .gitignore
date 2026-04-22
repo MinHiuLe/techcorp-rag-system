@@ -1,0 +1,18 @@
+# Môi trường ảo (Ngốn vài GB rác)
+venv/
+env/
+
+# File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
+.env
+
+# Database nội bộ và Cache
+storage/
+__pycache__/
+*.pyc
+.pytest_cache/
+.chroma/
+.qdrant/
+
+# Rác của hệ điều hành
+.DS_Store
+Thumbs.db

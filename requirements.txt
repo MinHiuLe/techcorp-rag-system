@@ -1,0 +1,13 @@
+fastapi[standard]
+uvicorn
+pydantic-settings
+qdrant-client
+sentence-transformers
+fastembed
+groq
+cohere
+streamlit
+requests
+python-dotenv
+langsmith
+numpy
