@@ -16,3 +16,5 @@ __pycache__/
 # Rác của hệ điều hành
 .DS_Store
 Thumbs.db
+
+long_term_memory.md

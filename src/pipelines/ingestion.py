@@ -1,3 +1,4 @@
+import logging
 import boto3
 import uuid
 from qdrant_client import QdrantClient
@@ -7,12 +8,15 @@ from fastembed import SparseTextEmbedding
 from pydantic import ValidationError
 
 from config.settings import settings
-from src.schemas import DocumentMetadata
+from src.schemas import ChunkPayload
 from src.utils.text_utils import clean_text
+from .extractor import MetadataExtractor
 
-# =========================
-# KHỞI TẠO CLIENTS & MODELS
-# =========================
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
 s3_client = boto3.client(
     "s3",
     endpoint_url=f"http://{settings.MINIO_ENDPOINT}",
@@ -22,129 +26,118 @@ s3_client = boto3.client(
 )
 
 qdrant_client = QdrantClient(url=settings.QDRANT_URL, timeout=60)
+
 dense_model = SentenceTransformer("all-MiniLM-L6-v2")
 sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+extractor = MetadataExtractor()
 
 COLLECTION_NAME = "techcorp_knowledge"
+BATCH_SIZE = 64
 
-# =========================
-# UTILS
-# =========================
-
-def parse_metadata(content: str):
-    lines = content.split("\n")
-    metadata = {}
-    in_meta = False
-    for line in lines:
-        if "## Metadata (for RAG)" in line:
-            in_meta = True
-            continue
-        if in_meta and line.startswith("- "):
-            parts = line[2:].split(": ", 1)
-            if len(parts) == 2:
-                metadata[parts[0].strip().lower()] = parts[1].strip()
-    return metadata
 
 def recursive_split(text: str, chunk_size=1000, overlap=100):
     sections = text.split("\n## ")
     chunks = []
+
     for section in sections:
         section = section.strip()
-        if not section: continue
+        if not section:
+            continue
+
         if len(section) <= chunk_size:
             chunks.append(section)
             continue
+
         start = 0
         while start < len(section):
             end = start + chunk_size
             chunks.append(section[max(0, start - overlap):end].strip())
             start += chunk_size
+
     return chunks
 
-# ==========================================
-# KHỞI TẠO QDRANT VỚI CẤU HÌNH HYBRID
-# ==========================================
+
 def init_qdrant():
     if qdrant_client.collection_exists(COLLECTION_NAME):
-        print(f"[*] Đang làm sạch Collection: {COLLECTION_NAME}")
         qdrant_client.delete_collection(COLLECTION_NAME)
 
-    # Cấu hình đa Vector: 1 Dense + 1 Sparse
     qdrant_client.create_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config={
-            "dense": VectorParams(size=384, distance=Distance.COSINE)
-        },
-        sparse_vectors_config={
-            "sparse": SparseVectorParams()
-        }
+        vectors_config={"dense": VectorParams(size=384, distance=Distance.COSINE)},
+        sparse_vectors_config={"sparse": SparseVectorParams()}
     )
-    print(f"[OK] Đã tạo Collection '{COLLECTION_NAME}' với cấu hình Hybrid Search.")
 
-# =========================
-# PIPELINE CHÍNH
-# =========================
+    logger.info(f"Collection '{COLLECTION_NAME}' created.")
+
+
 def process_and_upload():
     bucket_name = "data"
     response = s3_client.list_objects_v2(Bucket=bucket_name)
 
     if 'Contents' not in response:
-        print("[!] Không tìm thấy dữ liệu trong MinIO.")
+        logger.warning("No data found in MinIO.")
         return
+
+    total_chunks = 0
 
     for obj in response.get("Contents", []):
         file_key = obj["Key"]
-        print(f"[*] Đang băm dữ liệu file: {file_key}")
 
         file_data = s3_client.get_object(Bucket=bucket_name, Key=file_key)
         content = clean_text(file_data["Body"].read().decode("utf-8", errors="ignore"))
 
-        metadata = parse_metadata(content)
+        doc_meta = extractor.process(file_key=file_key, content=content)
+
         chunks = recursive_split(content)
-        
-        points = []
 
-        for idx, text in enumerate(chunks):
-            try:
-                # 1. Tạo Dense Vector (Semantic)
-                dense_vec = dense_model.encode(text).tolist()
+        for i in range(0, len(chunks), BATCH_SIZE):
+            batch_texts = chunks[i:i + BATCH_SIZE]
 
-                # 2. Tạo Sparse Vector (BM25 Keyword)
-                # fastembed trả về generator, ta lấy phần tử đầu tiên
-                sparse_embedding = list(sparse_model.embed([text]))[0]
-                
-                meta_obj = DocumentMetadata(
-                    source=file_key,
-                    category=metadata.get("category", "IT"),
-                    chunk_id=idx
-                )
+            dense_vecs = dense_model.encode(batch_texts).tolist()
+            sparse_vecs = list(sparse_model.embed(batch_texts))
 
-                points.append(
-                    PointStruct(
-                        id=str(uuid.uuid4()),
-                        vector={
-                            "dense": dense_vec,
-                            "sparse": SparseVector(
-                                indices=sparse_embedding.indices.tolist(),
-                                values=sparse_embedding.values.tolist()
-                            )
-                        },
-                        payload={
-                            "text": text,
-                            **meta_obj.model_dump(),
-                        },
+            points = []
+
+            for j, text in enumerate(batch_texts):
+                chunk_id = i + j
+
+                try:
+                    payload = ChunkPayload(
+                        chunk_id=chunk_id,
+                        document_id=doc_meta.document_id,
+                        source=doc_meta.source,
+                        text=text,
+                        category=doc_meta.category,
+                        doc_type=doc_meta.doc_type,
+                        security_level=doc_meta.security_level
                     )
-                )
 
-            except ValidationError as e:
-                print(f" [!] Schema Error {file_key}: {e}")
+                    points.append(
+                        PointStruct(
+                            id=str(uuid.uuid4()),
+                            vector={
+                                "dense": dense_vecs[j],
+                                "sparse": SparseVector(
+                                    indices=sparse_vecs[j].indices.tolist(),
+                                    values=sparse_vecs[j].values.tolist()
+                                )
+                            },
+                            payload=payload.model_dump()
+                        )
+                    )
 
-        # Batch Upsert
-        if points:
-            qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
-            print(f"    -> Đã đẩy {len(points)} chunks (Hybrid Vectors) lên Qdrant.")
+                except ValidationError as e:
+                    logger.error(f"Schema error in file {file_key}: {e}")
+
+            if points:
+                qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
+                total_chunks += len(points)
+
+        logger.info(f"Processed {len(chunks)} chunks from {file_key}")
+
+    logger.info(f"Completed. Total chunks: {total_chunks}")
+
 
 if __name__ == "__main__":
     init_qdrant()
     process_and_upload()
-    print("\n[HOÀN TẤT] Hệ thống đã sẵn sàng cho Hybrid Search!")

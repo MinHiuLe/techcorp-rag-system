@@ -7,9 +7,8 @@ from langsmith import traceable
 class RetrievalStrategyEngine:
     @staticmethod
     def get_strategy(analysis: QueryAnalysis):
-        # Top-K retrieval: Luôn lấy một lượng lớn để tạo phễu lọc
         fetch_k = 20 
-        strategy = "hybrid" # Luôn dùng Hybrid để đảm bảo Recall
+        strategy = "hybrid"
         return strategy, fetch_k
 
 class RetrievalEngine:
@@ -26,7 +25,6 @@ class RetrievalEngine:
             values=sparse_embedding.values.tolist()
         )
 
-        # Mặc định gọi Hybrid (RRF Fusion)
         results = self.db.query_points(
             collection_name=settings.COLLECTION_NAME,
             prefetch=[

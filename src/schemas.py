@@ -1,18 +1,39 @@
 from pydantic import BaseModel, Field
 from typing import Literal, List, Optional
 
+
+class Provenance(BaseModel):
+    tier: str = Field(description="Tầng xử lý tìm ra kết quả (VD: T1_Path, T2_Scoring, Default)")
+    confidence: float = Field(default=1.0, description="Độ tự tin của hệ thống")
+
+
 class DocumentMetadata(BaseModel):
-    source: str           
-    category: str         
-    chunk_id: int   
+    document_id: str = Field(...)
+    source: str = Field(...)
+    category: str = Field(default="General")
+    doc_type: str = Field(default="Document")
+    security_level: str = Field(default="Internal")
+    updated_at: Optional[str] = Field(default=None)
+
+    provenance: Provenance
+
+
+class ChunkPayload(BaseModel):
+    chunk_id: int
+    document_id: str
+    source: str
+    text: str
+    category: str
+    doc_type: str
+    security_level: str
+
 
 class QueryAnalysis(BaseModel):
-    """Lớp đầu ra của QueryAnalyzer - Chỉ làm nhiệm vụ hiểu"""
-    intent: Literal["technical", "general"] = Field(description="Phân loại mục đích của user.")
-    complexity_score: float = Field(ge=0.0, le=1.0, description="Độ khó của câu hỏi.")
-    ambiguity_score: float = Field(ge=0.0, le=1.0, description="Độ mập mờ, thiếu thông tin.")
-    entities: List[str] = Field(default_factory=list, description="Danh sách từ khóa kỹ thuật, mã lỗi, tên riêng.")
+    intent: Literal["technical", "general"]
+    complexity_score: float
+    ambiguity_score: float
+    entities: List[str] = Field(default_factory=list)
+
 
 class RewrittenQuery(BaseModel):
-    """Lớp đầu ra của QueryRewriter - Chỉ làm nhiệm vụ tối ưu hóa câu lệnh search"""
-    search_query: str = Field(description="Câu hỏi đã được giải ngọng và bổ sung keyword để search.")
+    search_query: str
