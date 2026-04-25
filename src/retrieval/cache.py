@@ -50,7 +50,9 @@ class SemanticCache:
         return None
 
     def add(self, query: str, query_embedding: list, answer: str):
-        """Thêm câu hỏi và câu trả lời mới vào bộ nhớ đệm."""
+        # Không cache câu trả lời "không có tài liệu"
+        if "chưa có tài liệu" in answer.lower():
+            return
         self.cache_data.append({
             "query": query,
             "embedding": query_embedding,
