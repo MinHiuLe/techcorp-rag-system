@@ -96,12 +96,3 @@ IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Bạn k
 
 **4. Hạn mức in có thể chuyển sang tháng sau không?**  
 Không, điểm in không được cộng dồn. Hãy sử dụng hợp lý, in nháp nên dùng giấy tái chế ở khay 2 của máy.
-
-## Metadata (RAG)
-
-doc_type: hardware_guide  
-system: printing  
-category: office_it  
-security_level: internal  
-device_type: ricoh_hp  
-embedding_priority: medium

@@ -72,12 +72,3 @@ Liên hệ trực tiếp IT Support hoặc gọi hotline 8888. Họ sẽ xác th
 
 **4. Khách hàng của tôi cần dùng Wi-Fi thì làm thế nào?**  
 Hướng dẫn khách kết nối vào **TechCorp_Guest** và lấy mật khẩu từ lễ tân (thay đổi hàng tuần). Không cho khách dùng mạng nội bộ.
-
-## Metadata (RAG)
-
-doc_type: troubleshooting_guide  
-system: network  
-category: wifi_access  
-security_level: internal  
-protocol: 802.1X  
-embedding_priority: medium

@@ -94,12 +94,3 @@ Tạo ticket trên Jira (Hardware-Request), ghi rõ lý do (ví dụ: cần màn
 
 **4. Thiết bị cũ của tôi có được giữ lại sau khi nghỉ việc không?**  
 Không. Tất cả tài sản công ty phải được hoàn trả, trừ khi có thỏa thuận mua lại bằng văn bản và được CFO phê duyệt.
-
-## Metadata (RAG)
-
-doc_type: hardware_policy  
-system: asset_management  
-category: it_onboarding  
-security_level: internal  
-compliance: asset_tracking  
-embedding_priority: high

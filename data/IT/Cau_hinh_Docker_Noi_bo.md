@@ -256,12 +256,3 @@ Chỉ cho phép exception nếu:
 - có audit log
 
 ---
-
-## 14. Metadata (RAG)
-
-doc_type: infrastructure_config  
-system: docker  
-category: devops  
-security_level: internal  
-chunking: hierarchical  
-embedding_priority: high

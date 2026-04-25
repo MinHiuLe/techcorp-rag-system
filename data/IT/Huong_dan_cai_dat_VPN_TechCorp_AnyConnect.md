@@ -71,11 +71,3 @@ Nhấn **Disconnect** trong giao diện AnyConnect. Luôn ngắt kết nối khi
 - **Bắt buộc** báo cáo ngay cho IT nếu nghi ngờ tài khoản bị xâm phạm.
 - Kết nối VPN sẽ tự động ngắt sau 8 giờ không hoạt động.
 
-## Metadata (RAG)
-
-doc_type: end_user_guide  
-system: vpn  
-category: remote_access  
-security_level: internal  
-platform: anyconnect  
-embedding_priority: high

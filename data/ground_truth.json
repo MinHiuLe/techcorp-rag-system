@@ -4,39 +4,259 @@
     "ground_truth": "Chỉ được phép sử dụng các base image an toàn: alpine, debian:slim, ubuntu LTS. Không dùng image không rõ nguồn gốc và không dùng tag 'latest' trong production."
   },
   {
-    "question": "Có được phép chạy Docker container với quyền root không?",
-    "ground_truth": "Không. Quy tắc bắt buộc trong Dockerfile Standards của TechCorp yêu cầu không chạy root user trong container."
+    "question": "Nhân viên TechCorp được nâng cấp laptop tối đa mấy lần sau bao nhiêu năm sử dụng?",
+    "ground_truth": "Mỗi nhân viên được nâng cấp laptop tối đa 1 lần sau 3 năm sử dụng."
   },
   {
-    "question": "Quy trình cấp quyền Jira gồm những bước nào?",
-    "ground_truth": "Gồm 5 bước: 1) Tạo yêu cầu trên Jira Service Management, 2) Xác thực yêu cầu bởi IT Support, 3) Phê duyệt qua các cấp (Team Lead, Project Manager, Security Team), 4) Cấp quyền và ghi log, 5) Xác nhận qua email."
+    "question": "Trong chính sách bảo hành thiết bị phần cứng, thời gian bảo hành tiêu chuẩn là bao lâu?",
+    "ground_truth": "Thời gian bảo hành tiêu chuẩn là 24 tháng kể từ ngày cấp phát, tương ứng bảo hành nhà sản xuất."
   },
   {
-    "question": "SLA cho yêu cầu cấp quyền Developer trong Jira là bao lâu?",
-    "ground_truth": "Tối đa 1 ngày làm việc."
+    "question": "Làm thế nào để nhân viên TechCorp yêu cầu cấp phát màn hình phụ?",
+    "ground_truth": "Nhân viên tạo ticket trên Jira (Hardware-Request), ghi rõ lý do (ví dụ: cần màn hình rộng cho lập trình giao diện). Manager duyệt, sau đó IT cấp."
   },
   {
-    "question": "Theo chính sách bảo mật, dữ liệu Confidential phải được xử lý như thế nào?",
-    "ground_truth": "Phải được mã hóa cả khi lưu trữ (at rest) và khi truyền tải (in transit) qua HTTPS/TLS. Không lưu trên máy cá nhân, không upload lên dịch vụ bên thứ ba nếu chưa được phê duyệt."
+    "question": "Khi nhân viên nghỉ việc, thời hạn bàn giao thiết bị phần cứng cho IT Support là bao lâu?",
+    "ground_truth": "Nhân viên phải mang thiết bị (kèm sạc, phụ kiện) đến IT Support (tầng 5, tòa nhà A) trong vòng 5 ngày làm việc."
   },
   {
-    "question": "TechCorp có bắt buộc bật MFA không?",
-    "ground_truth": "Có. Bắt buộc bật Multi-Factor Authentication (MFA) cho tất cả nhân viên."
+    "question": "TechCorp sử dụng phần mềm bảo mật nào trên laptop của nhân viên?",
+    "ground_truth": "IT cài đặt phần mềm bảo mật CrowdStrike, BitLocker/FileVault trên laptop."
   },
   {
-    "question": "Khi nào quyền truy cập Jira bị thu hồi?",
-    "ground_truth": "Khi nhân viên rời dự án, chuyển team, kết thúc hợp đồng, hoặc phát hiện vi phạm bảo mật."
+    "question": "Để cài đặt máy in trên Windows, nhân viên cần nhập đường dẫn nào vào File Explorer?",
+    "ground_truth": "Nhập đường dẫn: \\\\print.techcorp.local"
   },
   {
-    "question": "Ai có thể truy cập dữ liệu Confidential theo RBAC của TechCorp?",
-    "ground_truth": "Manager được truy cập toàn bộ; Engineer chỉ được truy cập một phần Confidential; Intern không được truy cập Confidential."
+    "question": "Máy in nào tại TechCorp hỗ trợ chức năng đóng ghim?",
+    "ground_truth": "Máy in TechCorp-B7-04 (Ricoh IM C4510) tại tòa B tầng 7 hỗ trợ đóng ghim."
   },
   {
-    "question": "TechCorp yêu cầu logging trong container như thế nào?",
-    "ground_truth": "Logs phải ghi ra stdout / stderr, không ghi file trong container. Sử dụng centralized logging như ELK hoặc Loki."
+    "question": "Hạn mức in mỗi tháng cho mỗi nhân viên TechCorp là bao nhiêu điểm?",
+    "ground_truth": "Mỗi nhân viên được 200 điểm in mỗi tháng, reset vào ngày 1."
   },
   {
-    "question": "Ai chịu trách nhiệm kiểm toán quyền truy cập Jira định kỳ?",
-    "ground_truth": "Security Team. Audit định kỳ mỗi tháng và báo cáo gửi Head of Engineering."
+    "question": "In một mặt A4 màu tiêu tốn bao nhiêu điểm in?",
+    "ground_truth": "5 điểm cho một mặt A4 màu."
+  },
+  {
+    "question": "Làm thế nào để in tài liệu mật mà không lưu lại trên máy in?",
+    "ground_truth": "Sử dụng chức năng Secure Print: trong driver chọn 'Print → Job Type → Secure Print', nhập mã PIN 4 số, sau đó đến máy in nhập PIN để in ngay."
+  },
+  {
+    "question": "Nhân viên TechCorp nên chuyển tiếp email phishing đến địa chỉ nào?",
+    "ground_truth": "Chuyển tiếp email (dưới dạng attachment) đến địa chỉ phishing@techcorp.com."
+  },
+  {
+    "question": "Nếu đã click vào link lừa đảo, hành động đầu tiên nhân viên cần làm là gì?",
+    "ground_truth": "Ngắt kết nối mạng ngay lập tức (tắt Wi-Fi, rút cáp mạng)."
+  },
+  {
+    "question": "TechCorp sử dụng giao thức xác thực nào cho mạng Wi-Fi nội bộ TechCorp_5G?",
+    "ground_truth": "Mạng TechCorp_5G sử dụng xác thực mật khẩu cá nhân + 802.1X (RADIUS)."
+  },
+  {
+    "question": "Mật khẩu Wi-Fi TechCorp_5G được đồng bộ với thông tin gì của nhân viên?",
+    "ground_truth": "Mật khẩu TechCorp_5G được đồng bộ với mật khẩu đăng nhập máy tính (Active Directory)."
+  },
+  {
+    "question": "Nhân viên quên mật khẩu AD và không thể đăng nhập máy tính thì liên hệ ai?",
+    "ground_truth": "Liên hệ IT Support qua số 8888 hoặc nhờ đồng nghiệp tạo ticket Jira (dự án IT-Support, loại Password Reset)."
+  },
+  {
+    "question": "Trong quy trình cấp quyền Jira, vai trò nào có quyền 'Administer Projects'?",
+    "ground_truth": "Role Admin có quyền Administer Projects (cấu hình project settings)."
+  },
+  {
+    "question": "Thời gian SLA để cấp quyền Developer / Tester trên Jira là bao lâu?",
+    "ground_truth": "Thời gian xử lý tối đa là 1 ngày."
+  },
+  {
+    "question": "Theo chính sách bảo mật TechCorp, dữ liệu Confidential phải được mã hóa trong những trường hợp nào?",
+    "ground_truth": "Dữ liệu Confidential phải được mã hóa khi lưu trữ (at rest) và khi truyền tải (in transit - HTTPS/TLS)."
+  },
+  {
+    "question": "Session timeout theo chính sách bảo mật TechCorp là bao lâu?",
+    "ground_truth": "Session timeout sau 15 phút không hoạt động."
+  },
+  {
+    "question": "Trong sales pipeline, giai đoạn Proposal Sent có xác suất closing là bao nhiêu?",
+    "ground_truth": "Xác suất closing là 40%."
+  },
+  {
+    "question": "Một deal không có hoạt động trong 14 ngày sẽ bị xử lý thế nào?",
+    "ground_truth": "Hệ thống tự động chuyển về stage Prospecting và giảm 50% trọng số forecast."
+  },
+  {
+    "question": "AE Junior tại TechCorp có monthly quota là bao nhiêu?",
+    "ground_truth": "Monthly Quota của AE Junior là 400 triệu VNĐ."
+  },
+  {
+    "question": "Ai có quyền phê duyệt chiết khấu trên 10% cho enterprise deal?",
+    "ground_truth": "Phải có phê duyệt từ Deal Desk (gồm Sales Manager + Product + Legal). Nghiêm cấm tự ý commit mức chiết khấu >10% nếu chưa qua Deal Desk."
+  },
+  {
+    "question": "Khi gặp đối thủ phá giá thấp hơn 30%, bước đầu tiên AE cần làm gì?",
+    "ground_truth": "Thu thập bằng chứng (email, báo giá) lưu vào thư mục Competitor_Intel trên OneDrive nội bộ, sau đó báo cáo ngay cho Sales Manager."
+  },
+  {
+    "question": "TechCorp yêu cầu Docker image phải tuân theo quy tắc đặt tên như thế nào?",
+    "ground_truth": "Format: techcorp/<service-name>:<version>. Ví dụ: techcorp/auth-service:1.2.0."
+  },
+  {
+    "question": "Trong Dockerfile, nhân viên TechCorp bị cấm làm gì liên quan đến secrets?",
+    "ground_truth": "Cấm hardcode secrets, không dùng .env trong production image, không commit credential vào git."
+  },
+  {
+    "question": "Địa chỉ server VPN TechCorp-AnyConnect là gì?",
+    "ground_truth": "Địa chỉ server: vpn.techcorp.com"
+  },
+  {
+    "question": "Sau khi kết nối VPN, làm thế nào để kiểm tra kết nối thành công?",
+    "ground_truth": "Mở trình duyệt truy cập https://portal.techcorp.local, nếu hiển thị trang đăng nhập nội bộ thì kết nối thành công."
+  },
+  {
+    "question": "Nhân viên TechCorp được nghỉ phép năm bao nhiêu ngày sau khi làm việc trên 1 năm?",
+    "ground_truth": "16 ngày/năm."
+  },
+  {
+    "question": "Thời gian blackout của phòng Sales là khi nào?",
+    "ground_truth": "5 ngày cuối tháng 3, 6, 9, 12 (chốt KPI quý)."
+  },
+  {
+    "question": "Nhân viên có thể chuyển tối đa bao nhiêu ngày phép năm sang năm sau?",
+    "ground_truth": "Được phép chuyển tối đa 5 ngày sang năm sau."
+  },
+  {
+    "question": "Chu kỳ đánh giá giữa năm (Mid-year) tại TechCorp diễn ra khi nào?",
+    "ground_truth": "1-15/7 hàng năm."
+  },
+  {
+    "question": "Xếp loại 'Xuất sắc' trong đánh giá hiệu suất đòi hỏi tổng điểm trung bình bao nhiêu?",
+    "ground_truth": "Tổng điểm trung bình ≥ 4.5."
+  },
+  {
+    "question": "IDP (Kế hoạch Phát triển Cá nhân) cần được cập nhật với tần suất nào?",
+    "ground_truth": "Cập nhật quý một lần (vào tháng 1, 4, 7, 10)."
+  },
+  {
+    "question": "Ai là người phê duyệt yêu cầu nghỉ phép từ 3-5 ngày?",
+    "ground_truth": "Quản lý trực tiếp + HRBP."
+  },
+  {
+    "question": "Nhân viên có thể nghỉ WFH đột xuất tối đa bao nhiêu ngày mỗi tháng mà không tính phép?",
+    "ground_truth": "Tối đa 2 ngày/tháng, phải báo qua Slack channel #wf-today trước 8:30 sáng."
+  },
+  {
+    "question": "Khi máy in báo 'Offline', giải pháp đầu tiên theo hướng dẫn là gì?",
+    "ground_truth": "Kiểm tra kết nối mạng của máy in (xem đèn Ethernet trên máy). Nếu vẫn lỗi, báo IT."
+  },
+  {
+    "question": "Nhân viên có thể tự ý nâng cấp RAM/SSD cho laptop công ty không?",
+    "ground_truth": "Không, việc này làm mất bảo hành và vi phạm chính sách. Mọi nâng cấp phải do IT thực hiện."
+  },
+  {
+    "question": "Để báo cáo sự cố mất cắp laptop, nhân viên phải thông báo cho ai trong vòng 2 giờ?",
+    "ground_truth": "Báo Security (hotline 8888) và IT trong vòng 2 giờ, nộp báo cáo công an (nếu có)."
+  },
+  {
+    "question": "Trên macOS, để thêm máy in, cần chọn protocol nào khi nhập địa chỉ?",
+    "ground_truth": "Protocol: Line Printer Daemon (LPD)."
+  },
+  {
+    "question": "Email phishing thường sử dụng miền giả mạo như thế nào để lừa nhân viên TechCorp?",
+    "ground_truth": "Miền @techcorp.com chính thống chỉ có đuôi @techcorp.com, không có ký tự lạ như @techcorp-verify.com."
+  },
+  {
+    "question": "Nếu vô tình nhập mật khẩu vào trang phishing, nhân viên cần làm gì?",
+    "ground_truth": "Ngay lập tức đổi mật khẩu AD và tất cả mật khẩu có liên quan (email, VPN, Jira, GitHub), kích hoạt MFA lại, thông báo cho Security Team."
+  },
+  {
+    "question": "Để kết nối Wi-Fi lần đầu, nhân viên mới cần nhập tên đăng nhập theo định dạng nào?",
+    "ground_truth": "ten_dang_nhap_AD@techcorp.com (ví dụ: nguyen.vanA@techcorp.com)."
+  },
+  {
+    "question": "Trong Jira, permission 'Browse Projects' thuộc nhóm nào?",
+    "ground_truth": "Thuộc nhóm permission scheme, cho phép xem dự án."
+  },
+  {
+    "question": "Theo chính sách bảo mật, nhân viên có được chia sẻ tài khoản không?",
+    "ground_truth": "Cấm chia sẻ tài khoản dưới mọi hình thức. Mỗi nhân viên có tài khoản riêng, bắt buộc MFA."
+  },
+  {
+    "question": "Weighted pipeline được tính như thế nào?",
+    "ground_truth": "Weighted Pipeline được tính bằng tổng (giá trị deal * xác suất closing theo stage)."
+  },
+  {
+    "question": "Ai có quyền phê duyệt discount đặc biệt cho enterprise deal cuối quý?",
+    "ground_truth": "Cần có email phê duyệt từ Sales Director (hoặc Deal Desk tùy mức discount)."
+  },
+  {
+    "question": "Trong Docker multi-stage build, lệnh nào dùng để copy kết quả build từ stage builder?",
+    "ground_truth": "COPY --from=builder /app/dist ./dist"
+  },
+  {
+    "question": "Nhân viên có thể in từ thiết bị cá nhân không?",
+    "ground_truth": "Chỉ được phép in từ thiết bị công ty. Thiết bị cá nhân muốn in phải qua cổng web print: https://print.techcorp.local/webprint (xác thực AD)."
+  },
+  {
+    "question": "Khi quên mật khẩu AD và không có quyền truy cập email, nhân viên liên hệ IT Support bằng cách nào?",
+    "ground_truth": "Liên hệ trực tiếp IT Support qua số 8888 hoặc đến quầy IT Support tầng 5 tòa A, mang theo thẻ nhân viên."
+  },
+  {
+    "question": "Đánh giá 360° được áp dụng cho đối tượng nào?",
+    "ground_truth": "Chỉ áp dụng cho Manager & Lead, với ít nhất 2 nhân viên cấp dưới và 2 đồng nghiệp cùng cấp đánh giá ẩn danh."
+  },
+  {
+    "question": "Nhân viên bị đánh giá dưới 2.0 hai kỳ liên tiếp sẽ xử lý thế nào?",
+    "ground_truth": "HR sẽ tiến hành quy trình chấm dứt hợp đồng theo Disciplinary Policy."
+  },
+  {
+    "question": "Khi kết nối VPN, xác thực MFA bằng ứng dụng nào?",
+    "ground_truth": "Microsoft Authenticator hoặc Google Authenticator."
+  },
+  {
+    "question": "Docker container không được chạy với user nào?",
+    "ground_truth": "Không chạy với root user (non-root user required)."
+  },
+  {
+    "question": "Ai có trách nhiệm thay mực in khi máy báo hết?",
+    "ground_truth": "IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Nhân viên chỉ cần báo qua ticket nếu máy báo lỗi hơn 1 ngày chưa xử lý."
+  },
+  {
+    "question": "Nhân viên cần hoàn thành khóa đào tạo nhận biết phishing mỗi năm mấy lần?",
+    "ground_truth": "Mỗi năm một lần (bắt buộc)."
+  },
+  {
+    "question": "Khi nào một deal được chuyển sang stage 'At Risk'?",
+    "ground_truth": "Khi deal không thay đổi stage trong 21 ngày, khách hàng không trả lời email, AE phải gắn tag 'At Risk'."
+  },
+  {
+    "question": "Docker image bị chặn nếu phát hiện lỗ hổng bảo mật mức độ nào?",
+    "ground_truth": "Block nếu CVE HIGH hoặc CRITICAL."
+  },
+  {
+    "question": "Nhân viên muốn yêu cầu cấp quyền Jira cần tạo ticket ở project nào?",
+    "ground_truth": "Project: IT-Access-Request, Issue Type: Access Request."
+  },
+  {
+    "question": "Thời gian tối thiểu đăng ký nghỉ phép năm trước ngày nghỉ là bao lâu?",
+    "ground_truth": "Ít nhất 3 ngày làm việc."
+  },
+  {
+    "question": "Nhân viên có thể khiếu nại kết quả đánh giá hiệu suất trong vòng bao nhiêu ngày?",
+    "ground_truth": "7 ngày làm việc kể từ khi nhận kết quả."
+  },
+  {
+    "question": "Forecast accuracy được tính như thế nào?",
+    "ground_truth": "(1 - |Forecast - Actual| / Actual) * 100%. Nếu Actual = 0 và Forecast > 0 => Accuracy = 0%."
+  },
+  {
+    "question": "Trong quy trình xử lý enterprise deal, Deal Desk họp trong vòng bao lâu sau khi AE tạo task?",
+    "ground_truth": "Trong vòng 24 giờ."
+  },
+  {
+    "question": "Nhân viên có được phép giữ lại thiết bị cũ sau khi nghỉ việc không?",
+    "ground_truth": "Không. Tất cả tài sản công ty phải được hoàn trả, trừ khi có thỏa thuận mua lại bằng văn bản và được CFO phê duyệt."
   }
 ]

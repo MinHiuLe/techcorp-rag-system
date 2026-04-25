@@ -130,11 +130,3 @@ Thiết lập các nguyên tắc và quy định nhằm bảo vệ hệ thống,
   - Xóa thông tin khỏi repository
 
 ---
-
-## Metadata (for RAG)
-
-- category: security
-- domain: security_policy
-- security_level: confidential
-- access_scope: restricted
-- requires_role: manager_or_above
