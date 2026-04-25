@@ -14,9 +14,10 @@ class ContextBuilder:
 
         context_parts = []
         current_length = 0
+        max_len = getattr(settings, 'MAX_CONTEXT_LENGTH', 12000)
         for doc in unique_docs:
             snippet = f"[Nguồn: {doc['source']}]\n{doc['text']}\n---"
-            if current_length + len(snippet) > settings.MAX_CONTEXT_LENGTH:
+            if current_length + len(snippet) > max_len:
                 print("  [Builder] Token Limit Reached -> Truncating Context")
                 break
             context_parts.append(snippet)
