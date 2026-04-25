@@ -18,7 +18,7 @@ os.environ["EVAL_MODE"] = "true"
 from src.agent import ProductionRAG
 from evaluation.eval_schemas import RetrievalEvalResult, GenerationEvalResult
 from evaluation.eval_prompts import RETRIEVAL_EVAL_PROMPT, GENERATION_EVAL_PROMPT
-
+import random
 
 print("[System] Đang khởi tạo hệ thống RAG và LLM-Judge...")
 
@@ -29,7 +29,7 @@ JUDGE_MODEL = "llama-3.3-70b-versatile"
 
 
 def run_rag_pipeline(inputs: dict) -> dict:
-    time.sleep(2.5)
+    time.sleep(random.uniform(4.0, 6.0)) 
     query = inputs["question"]
     rag_pipeline.clear_memory()
 
@@ -41,10 +41,13 @@ def run_rag_pipeline(inputs: dict) -> dict:
         return {"answer": "Error", "context": ""}
 
 
-def _call_judge(prompt: str, schema_class, retries=3) -> dict:
+def _call_judge(prompt: str, schema_class, retries=4) -> dict:
+    base_delay = 5  # Giây bắt đầu đợi nếu gặp lỗi
+    
     for attempt in range(retries):
         try:
-            time.sleep(2.5)
+            # Nghỉ nhẹ 1s trước mỗi nhát chém của Giám khảo
+            time.sleep(1) 
             response = judge_llm.chat.completions.create(
                 model=JUDGE_MODEL,
                 messages=[{"role": "user", "content": prompt}],
@@ -53,19 +56,26 @@ def _call_judge(prompt: str, schema_class, retries=3) -> dict:
             )
             result = schema_class(**json.loads(response.choices[0].message.content))
             return result.model_dump()
+            
         except Exception as e:
-            print(f"⚠️ Giám khảo bận (Thử lại {attempt+1}/{retries}). Lỗi: {e}")
-            time.sleep(5)
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str:
+                # Thuật toán Exponential Backoff: Lần 1 đợi 5s, lần 2 đợi 10s, lần 3 đợi 20s...
+                wait_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                print(f"⏳ Bị Rate Limit (429)! Đang làm mát hệ thống. Đợi {wait_time:.1f}s... (Thử lại {attempt+1}/{retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"⚠️ Giám khảo lỗi không xác định: {e} (Thử lại {attempt+1}/{retries})")
+                time.sleep(2)
 
-    print("❌ Bỏ qua test case này do quá tải API.")
+    print("❌ BỎ QUA test case này: LLM Judge hoàn toàn kiệt sức.")
     return {
         "context_recall": 0,
         "context_precision": 0.0,
         "strict_faithfulness": 0,
         "answer_relevance": 0.0,
-        "reasoning": "Rate Limit Exceeded"
+        "reasoning": "Rate Limit Exceeded sau nhiều lần thử."
     }
-
 
 def evaluate_retrieval(run, example) -> list:
     if not run.outputs or "context" not in run.outputs:
