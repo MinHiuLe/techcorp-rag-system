@@ -30,6 +30,7 @@ class RerankPolicyEngine:
         docs_to_rerank = documents[:15]
         docs_str = [f"SOURCE: {d['source']}\n{d['text']}" for d in docs_to_rerank]
  
+ 
         reranked = self.reranker.rerank(
             model="rerank-multilingual-v3.0",
             query=query,
