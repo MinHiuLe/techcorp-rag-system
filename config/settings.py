@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     COLLECTION_NAME: str = "techcorp_knowledge"
-    MAX_CONTEXT_LENGTH: int = 3000
+    MAX_CONTEXT_LENGTH: int = 15000
 
     EVAL_MODE: bool = Field(default=False, env="EVAL_MODE")
 
