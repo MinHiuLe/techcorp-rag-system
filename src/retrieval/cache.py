@@ -3,6 +3,15 @@ import json
 import os
 from langsmith import traceable
 
+NO_ANSWER_PHRASES = [
+    "hệ thống chưa có tài liệu",
+    "không có tài liệu",
+    "không có thông tin",
+    "không tìm thấy",
+    "không đủ thông tin",
+    "no information",
+    "not found",
+]
 
 class SemanticCache:
     def __init__(self, threshold=0.90):
@@ -51,37 +60,21 @@ class SemanticCache:
 
         return None
 
-    def add(self, query: str, query_embedding: list, answer: str, has_context: bool = True):
-        # Skip if no context
-        if not has_context:
+    def add(self, query: str, query_embedding: list, answer: str, context: str):
+        # 1. Check context
+        if not context or not context.strip():
             return
 
-        # Normalize answer
-        normalized_answer = answer.strip().lower()
-        
-        # Comprehensive list of "no answer" phrases
-        no_answer_phrases = [
-            "hệ thống chưa có tài liệu",
-            "không có tài liệu",
-            "không có thông tin", 
-            "không tìm thấy",
-            "không đủ thông tin",
-            "no information",
-            "not found"
-        ]
-
-        # Check if answer contains any "no answer" phrase
-        for phrase in no_answer_phrases:
-            if phrase in normalized_answer:
-                print(f"[CACHE] Skipped - answer contains: '{phrase}'")
+        normalized = answer.strip().lower()
+        for phrase in NO_ANSWER_PHRASES:
+            if phrase in normalized:
+                print(f"  [Cache] Skipped — answer contains: '{phrase}'")
                 return
-
-        # Valid answer - save to cache
+ 
         self.cache_data.append({
-            "query": query,
+            "query"    : query,
             "embedding": query_embedding,
-            "answer": answer,
-            "has_answer": True
+            "answer"   : answer,
         })
-
         self._save_cache()
+        print(f"  [Cache] Saved — '{query[:50]}...'")

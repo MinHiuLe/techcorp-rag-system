@@ -51,10 +51,6 @@ class ProductionRAG:
         self.memory = []
 
     def clear_cache(self):
-        """
-        Xóa cache in-memory + disk.
-        Gọi trong evaluator trước mỗi sample để đảm bảo độc lập.
-        """
         self.cache.clear()
 
     def _get_formatted_history(self) -> str:
@@ -119,28 +115,10 @@ class ProductionRAG:
                 final_answer = self.generator.generate(query, final_context)
 
         # ── Cache Write (chỉ trong production) ─────────────────────────────────
-        # Sau fix
-        # Định nghĩa các cụm từ báo "không có thông tin"
-        no_answer_phrases = [
-            "hệ thống chưa có tài liệu",
-            "không có tài liệu",
-            "không có thông tin",
-            "không tìm thấy",
-            "không có trong tài liệu"
-        ]
 
-        # Kiểm tra trước khi ghi cache
-        should_cache = (
-            not IS_EVAL_MODE
-            and final_context
-            and analysis.intent != "general"
-            and not any(phrase in final_answer.lower() for phrase in no_answer_phrases)
-        )
-
-        if should_cache:
-            self.cache.add(query, query_embedding, final_answer, has_context=bool(final_context and final_context.strip()))
+        if not IS_EVAL_MODE and final_context and analysis.intent != "general":
+            self.cache.add(query, query_embedding, final_answer)
             
-
         # ── Memory ──────────────────────────────────────────────────────────────
         self.memory.append({"user": query, "bot": final_answer})
         if len(self.memory) > 3:
