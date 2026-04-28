@@ -28,7 +28,7 @@ s3_client = boto3.client(
 
 qdrant_client = QdrantClient(url=settings.QDRANT_URL, timeout=60)
 
-dense_model = SentenceTransformer("all-MiniLM-L6-v2")
+dense_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
 sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 extractor = MetadataExtractor()
 
@@ -168,7 +168,7 @@ def init_qdrant():
 
     qdrant_client.create_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config={"dense": VectorParams(size=384, distance=Distance.COSINE)},
+        vectors_config={"dense": VectorParams(size=1024, distance=Distance.COSINE)},
         sparse_vectors_config={"sparse": SparseVectorParams()}
     )
 

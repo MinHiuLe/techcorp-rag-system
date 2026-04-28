@@ -246,7 +246,7 @@ class ProductionRAG:
         # ... (giữ nguyên các phần init client và layers của bạn) ...
         self.groq = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.qdrant = QdrantClient(url="http://localhost:6333", timeout=60)
-        self.dense = SentenceTransformer("all-MiniLM-L6-v2")
+        self.dense = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
         self.sparse = SparseTextEmbedding(model_name="Qdrant/bm25")
         self.cohere = cohere.Client(api_key=os.getenv("COHERE_API_KEY"))
         

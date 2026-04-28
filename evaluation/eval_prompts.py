@@ -1,39 +1,63 @@
-RETRIEVAL_EVAL_PROMPT = """
-Bạn là giám khảo đánh giá hệ thống RAG. Nhiệm vụ: Đánh giá chất lượng của TÀI LIỆU TRÍCH XUẤT (Context).
-
+RETRIEVAL_EVAL_PROMPT = """Bạn là giám khảo RAG. Đánh giá TÀI LIỆU TRÍCH XUẤT theo 2 tiêu chí và trả về JSON.
+ 
 CÂU HỎI: {question}
-CÂU TRẢ LỜI KỲ VỌNG (Ground Truth): {ground_truth}
-TÀI LIỆU TRÍCH XUẤT (Context):
-{context}
-
+GROUND TRUTH: {ground_truth}
+CONTEXT: {context}
+ 
 Tiêu chí:
-1. context_recall (0 hoặc 1): TÀI LIỆU TRÍCH XUẤT có chứa đủ thông tin để tạo ra CÂU TRẢ LỜI KỲ VỌNG không?
-2. context_precision (0.0 đến 1.0): Tỷ lệ các đoạn văn bản trong TÀI LIỆU TRÍCH XUẤT thực sự đóng góp vào việc trả lời câu hỏi là bao nhiêu?
+- context_recall (0 hoặc 1): Context có đủ thông tin để tạo ra Ground Truth không?
+- context_precision (0.0–1.0): Tỷ lệ đoạn văn trong Context thực sự hữu ích để trả lời câu hỏi.
+ 
+NGHIÊM CẤM bịa thêm thông tin ngoài Context. Trả về đúng format:
+{{"context_recall": <int>, "context_precision": <float>, "reasoning": "<string>"}}"""
 
-BẮT BUỘC TRẢ VỀ JSON CHÍNH XÁC THEO FORMAT SAU:
+GENERATION_EVAL_PROMPT = """Bạn là giám khảo RAG. Đánh giá CÂU TRẢ LỜI theo 2 tiêu chí và trả về JSON.
+ 
+CÂU HỎI: {question}
+CONTEXT: {context}
+CÂU TRẢ LỜI: {generated_answer}
+ 
+Tiêu chí:
+- strict_faithfulness (0 hoặc 1): Câu trả lời có dựa 100% vào Context không? Có chi tiết bịa đặt → 0.
+- answer_relevance (0.0–1.0): Câu trả lời có đi thẳng vào câu hỏi không?
+ 
+Trả về đúng format:
+{{"strict_faithfulness": <int>, "answer_relevance": <float>, "reasoning": "<string>"}}"""
+
+
+# ── Combined prompt: gộp retrieval precision + generation vào 1 LLM call ───────
+# Dùng cho evaluator v4 trở đi. Recall tính riêng bằng embedding (không tốn token).
+
+COMBINED_EVAL_PROMPT = """\
+You are a RAG evaluation judge. Score the following across 3 metrics and return ONE JSON.
+
+QUESTION: {question}
+GROUND TRUTH: {ground_truth}
+RETRIEVED CONTEXT: {context}
+GENERATED ANSWER: {generated_answer}
+
+## Metrics
+
+1. context_precision (float 0.0–1.0)
+   What fraction of the retrieved context is actually relevant to answering the question?
+   1.0 = every sentence useful | 0.0 = entirely irrelevant
+
+2. strict_faithfulness (int 0 or 1)
+   Does the answer contain ONLY information supported by the context?
+   1 = fully grounded | 0 = any hallucinated claim
+
+3. answer_relevance (float 0.0–1.0)
+   How directly and completely does the answer address the question?
+   1.0 = perfect | 0.0 = off-topic
+
+4. reasoning (string)
+   One sentence explaining all three scores together.
+
+Return ONLY valid JSON, no markdown, no preamble:
 {{
-  "context_recall": <int>,
   "context_precision": <float>,
-  "reasoning": "<string: Giải thích ngắn gọn lý do cho số điểm trên>"
-}}
-"""
-
-GENERATION_EVAL_PROMPT = """
-Bạn là giám khảo đánh giá hệ thống RAG. Nhiệm vụ: Đánh giá chất lượng của CÂU TRẢ LỜI (Answer) do AI sinh ra.
-
-CÂU HỎI: {question}
-TÀI LIỆU TRÍCH XUẤT (Context):
-{context}
-CÂU TRẢ LỜI CẦN ĐÁNH GIÁ: {generated_answer}
-
-Tiêu chí:
-1. strict_faithfulness (0 hoặc 1): CÂU TRẢ LỜI có dựa 100% vào TÀI LIỆU TRÍCH XUẤT không? Nếu có chi tiết bịa đặt -> 0. Nếu từ chối trả lời vì không có tài liệu -> 1.
-2. answer_relevance (0.0 đến 1.0): CÂU TRẢ LỜI đi thẳng vào vấn đề của CÂU HỎI tốt đến mức nào?
-
-BẮT BUỘC TRẢ VỀ JSON CHÍNH XÁC THEO FORMAT SAU:
-{{
   "strict_faithfulness": <int>,
   "answer_relevance": <float>,
-  "reasoning": "<string: Giải thích ngắn gọn lý do cho số điểm trên>"
+  "reasoning": "<string>"
 }}
 """

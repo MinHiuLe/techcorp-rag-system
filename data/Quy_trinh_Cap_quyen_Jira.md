@@ -203,13 +203,3 @@ Quyền truy cập sẽ bị thu hồi khi:
 - Báo cáo quyền truy cập gửi cho Head of Engineering
 
 ---
-
-## 11. Metadata (RAG Indexing)
-
-- doc_type: access_control_procedure
-- system: jira
-- category: devops_access_management
-- security_level: internal
-- compliance: audit_required
-- chunking_strategy: procedural_steps
-- embedding_priority: high

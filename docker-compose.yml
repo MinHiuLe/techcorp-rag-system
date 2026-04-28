@@ -36,6 +36,7 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env
+      - .:/app
     depends_on:
       - qdrant
       - minio
@@ -49,6 +50,8 @@ services:
       - "8501:8501"
     environment:
       - API_URL=http://api:8000/chat
+    volumes:
+      - .:/app  
     depends_on:
       - api
     restart: always
