@@ -9,10 +9,6 @@ class RerankPolicyEngine:
         self.is_eval_mode = settings.EVAL_MODE
  
     def _get_top_k(self, analysis: QueryAnalysis) -> int:
-        """
-        Chỉ quyết định số chunk giữ lại, không dùng threshold.
-        LLM là tầng lọc cuối — reranker chỉ có nhiệm vụ sắp xếp.
-        """
         complexity = analysis.complexity_score
         if complexity < 0.3:
             return 2

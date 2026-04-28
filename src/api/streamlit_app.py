@@ -198,7 +198,6 @@ st.markdown("""
 def render_message(role, content, index):
     cls = "msg-user" if role == "user" else "msg-bot"
     label = "Bạn" if role == "user" else "KnowBot"
-    # Thêm một chút delay staggered cho mỗi message dựa trên index để tạo hiệu ứng mượt
     delay = min(index * 0.05, 0.5) 
     
     st.markdown(f"""
@@ -229,7 +228,6 @@ else:
 if prompt := st.chat_input("Nhập câu hỏi tại đây..."):
 
     st.session_state.messages.append({"role": "user", "content": prompt})
-    # Render ngay lập tức tin nhắn user để tạo cảm giác phản hồi nhanh
     st.rerun()
 
 # Logic xử lý API sau khi rerun để đảm bảo UI mượt

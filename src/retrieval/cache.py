@@ -26,11 +26,6 @@ class SemanticCache:
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
     def clear(self):
-        """
-        Reset cache hoàn toàn: xóa in-memory VÀ file trên disk.
-        Dùng trong eval mode để đảm bảo mỗi sample độc lập.
-        Không đụng đến production cache nếu dùng cache_file khác.
-        """
         self.cache_data = []
         if os.path.exists(self.cache_file):
             os.remove(self.cache_file)

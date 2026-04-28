@@ -6,26 +6,21 @@ from pydantic import BaseModel, Field
 import time
 import logging
 
-# Import Orchestrator từ cấu trúc mới
 from src.pipelines.orchestration import ProductionRAG
 
-# Thiết lập logging cơ bản
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Khởi tạo FastAPI app
 app = FastAPI(
     title="TechCorp IT Onboarding RAG API",
     description="API phục vụ tra cứu tài liệu nội bộ với kiến trúc Decision-Driven RAG.",
     version="1.0.0"
 )
 
-# Khởi tạo Singleton RAG Engine
 rag_engine = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Khởi tạo các model nặng (Llama-3, Qdrant, Embedding) khi server bật lên."""
     global rag_engine
     logger.info("Đang khởi tạo ProductionRAG Engine...")
     rag_engine = ProductionRAG()
@@ -48,18 +43,15 @@ class ChatResponse(BaseModel):
 # ==========================================
 @app.get("/health")
 async def health_check():
-    """Endpoint dùng cho Docker/Kubernetes kiểm tra trạng thái sống của container."""
     return {"status": "healthy", "model_loaded": rag_engine is not None}
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    """Endpoint chính để giao tiếp với bot."""
     if not rag_engine:
         raise HTTPException(status_code=503, detail="Hệ thống đang khởi động, vui lòng thử lại sau.")
     
     start_time = time.time()
     try:
-        # Gọi luồng xử lý chính
         answer = rag_engine.process(request.query)
         
         latency = round(time.time() - start_time, 2)
@@ -75,7 +67,6 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.delete("/chat/memory")
 async def clear_memory_endpoint():
-    """Endpoint hỗ trợ xóa memory (hữu ích cho testing)."""
     if rag_engine:
         rag_engine.clear_memory()
     return {"status": "Memory cleared."}
