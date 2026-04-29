@@ -29,4 +29,4 @@ def print_chunks_by_source(source_name: str):
         print(f"\n--- Chunk {p.payload.get('chunk_id')} ---")
         print(p.payload.get("text"))
 
-print_chunks_by_source("Chinh_sach_cap_phat_thiet_bi_phan_cung.md")
+print_chunks_by_source("hr_performance_review_idp_process.md")

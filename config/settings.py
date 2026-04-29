@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     LANGCHAIN_PROJECT: str = Field(default="TechCorp-RAG-Prod", env="LANGCHAIN_PROJECT")
 
     LLM_MODEL: str = "llama-3.3-70b-versatile"
+    UTILITY_MODEL: str = "llama-3.1-8b-instant"
     COLLECTION_NAME: str = "techcorp_knowledge"
     MAX_CONTEXT_LENGTH: int = 15000
 

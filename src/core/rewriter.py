@@ -7,16 +7,7 @@ class QueryRewriter:
         self.llm = llm_client
 
     def _has_entity_mismatch(self, query: str, entities: list[str]) -> bool:
-        """
-        BUG CŨ: True nếu BẤT KỲ entity nào không có trong query
-        → trigger rewrite dù query đã đúng phần lớn.
-
-        FIX: True chỉ khi HƠN NỬA số entities không có trong query.
-        VD: entities=["weighted pipeline", "sales pipeline"]
-            query="Weighted pipeline được tính như thế nào?"
-            → "weighted pipeline" có ✅, "sales pipeline" không có ❌
-            → 1/2 miss = 50% → không rewrite (< ngưỡng >50%)
-        """
+       
         if not entities:
             return False
         query_lower = query.lower()
@@ -24,12 +15,7 @@ class QueryRewriter:
         return missing > len(entities) / 2
 
     def _is_over_rewritten(self, original: str, rewritten: str) -> bool:
-        """
-        Guard chống over-rewrite: nếu rewritten dài hơn 2.5x original
-        → rewriter đang bịa thêm thông tin → fallback về original.
-        VD: "Weighted pipeline..." (5 words) → "Weighted pipeline được tính toán
-            dựa trên việc phân bổ trọng số..." (20+ words) → reject.
-        """
+      
         return len(rewritten) > len(original) * 2.5
 
     def rewrite(self, query: str, analysis: QueryAnalysis, history: str = "") -> str:
@@ -40,8 +26,8 @@ class QueryRewriter:
         - entity mismatch THỰC SỰ (hơn nửa entities thiếu, không phải 1 entity)
         """
         needs_rewrite = (
-            analysis.complexity_score >= 0.5       # tăng từ 0.35 → 0.5
-            or analysis.ambiguity_score >= 0.4     # tăng từ 0.3  → 0.4
+            analysis.complexity_score >= 0.5       
+            or analysis.ambiguity_score >= 0.4     
             or self._has_entity_mismatch(query, analysis.entities)
         )
         if not needs_rewrite:
@@ -66,11 +52,11 @@ CÂU HỎI HIỆN TẠI: {query}"""
         response = self.llm.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,    # tăng độ deterministic, giảm từ 0.1 → 0.0
+            temperature=0.0,    
         )
         rewritten = response.choices[0].message.content.strip()
 
-        # Guard: nếu rewrite quá dài → rewriter đang hallucinate → fallback
+     
         if self._is_over_rewritten(query, rewritten):
             print(f"  [Rewriter] '{query}' → SKIP (over-rewritten, fallback to original)")
             return query

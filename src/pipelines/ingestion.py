@@ -39,15 +39,7 @@ BATCH_SIZE = 64
 import re
 
 def smart_markdown_chunker(text: str, max_chunk_size: int = 1000, overlap: int = 150) -> list[str]:
-    """
-    v4 — bổ sung so với v3:
-    1. Split chỉ theo ## (top-level section), không tách ### thành section riêng
-       → ### Bước 1 luôn nằm trong section ## cha, không bị mồ côi.
-    2. Prepend section title (dòng ##) vào mọi chunk con của section đó
-       → mỗi chunk self-contained, embedding đủ semantic anchor.
-    3. Giữ nguyên: overlap trong path lắp ráp, table-aware split, sliding-window.
-    """
- 
+    
     # ── helpers ──────────────────────────────────────────────────────────────
  
     def is_markdown_table(block: str) -> bool:
@@ -94,10 +86,7 @@ def smart_markdown_chunker(text: str, max_chunk_size: int = 1000, overlap: int =
         return result
  
     def assemble_chunks(blocks: list[str], section_title: str = "") -> list[str]:
-        """
-        Lắp ráp các block thành chunks với overlap.
-        Prepend section_title vào mỗi chunk nếu chunk không bắt đầu bằng chính title đó.
-        """
+
         chunks = []
         current_chunk = ""
  
@@ -139,7 +128,6 @@ def smart_markdown_chunker(text: str, max_chunk_size: int = 1000, overlap: int =
  
         return chunks
  
-    # ── FIX 1: split chỉ theo ## (top-level), không tách ### ─────────────────
     section_pattern = re.compile(r'(?=^## )', re.MULTILINE)
     raw_sections = section_pattern.split(text.strip())
  
@@ -150,14 +138,11 @@ def smart_markdown_chunker(text: str, max_chunk_size: int = 1000, overlap: int =
         if not raw_section:
             continue
  
-        # Lấy section title (dòng đầu nếu là ##)
         first_line = raw_section.split('\n')[0].strip()
         section_title = first_line if first_line.startswith('## ') else ""
  
-        # Tách thành blocks theo blank line
         blocks = [b.strip() for b in re.split(r'\r?\n{2,}', raw_section) if b.strip()]
  
-        # FIX 2: assemble với prepend title
         all_chunks.extend(assemble_chunks(blocks, section_title))
  
     return all_chunks

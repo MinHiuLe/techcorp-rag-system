@@ -3,30 +3,50 @@ from pydantic import ValidationError
 from src.schemas import QueryAnalysis
 from config.settings import settings
 
+
 class QueryAnalyzer:
     def __init__(self, llm_client):
         self.llm = llm_client
 
     def analyze(self, query: str, history: str = "") -> QueryAnalysis:
-        prompt = f"""
-Phân tích câu hỏi HIỆN TẠI của người dùng dựa trên LỊCH SỬ HỘI THOẠI (nếu có) và trả về JSON:
-1. Intent: 'technical' (Tra cứu IT, nghiệp vụ, nhân sự) hoặc 'general' (CHỈ DÀNH CHO chào hỏi).
-2. Complexity Score: 0.0 (rất dễ, 1 fact) -> 1.0 (rất khó, cần so sánh/tổng hợp).
-3. Ambiguity Score: 0.0 (rõ ràng) -> 1.0 (mập mờ, dùng đại từ thay thế).
-4. Entities: Mảng từ khóa kỹ thuật. NẾU dùng đại từ, hãy trích xuất Entity từ LỊCH SỬ.
+        # Chỉ đưa history vào prompt khi thực sự có nội dung
+        history_section = (
+            f"LỊCH SỬ HỘI THOẠI GẦN ĐÂY:\n{history}\n"
+            if history and history != "Không có."
+            else ""
+        )
 
-LỊCH SỬ HỘI THOẠI GẦN ĐÂY:
-{history}
+        prompt = f"""Phân tích câu hỏi HIỆN TẠI và trả về JSON với 4 trường sau:
 
-CÂU HỎI HIỆN TẠI: {query}
-"""
+1. "intent": "technical" (tra cứu IT/HR/Sales/nghiệp vụ) hoặc "general" (chỉ dành cho chào hỏi thuần túy).
+2. "complexity_score": float 0.0–1.0.
+   - 0.0–0.3: câu hỏi đơn giản, 1 fact, 1 tài liệu.
+   - 0.3–0.65: câu hỏi vừa, cần 1–2 tài liệu.
+   - 0.65–1.0: câu hỏi phức tạp, cần tổng hợp nhiều tài liệu hoặc có nhiều câu hỏi con.
+3. "ambiguity_score": float 0.0–1.0. Cao khi dùng đại từ ("nó", "cái đó") hoặc thiếu context.
+4. "entities": mảng string — các từ khóa kỹ thuật quan trọng. Nếu dùng đại từ, lấy entity từ lịch sử.
+
+LƯU Ý QUAN TRỌNG:
+- Nếu câu hỏi chứa NHIỀU DẤU "?" hoặc hỏi về NHIỀU CHỦ ĐỀ KHÁC NHAU (VD: Docker + VPN, nghỉ phép + lương),
+  hãy đặt complexity_score >= 0.8 để hệ thống biết cần xử lý multi-topic.
+- Câu KHÔNG có dấu "?" là câu kể / trình bày tình huống (VD: "mình bị công ty đánh giá...", "máy tôi bị lỗi...").
+  Đây là câu ĐƠN CHỦ ĐỀ → complexity_score KHÔNG được vượt quá 0.65, bất kể nội dung.
+- Chỉ trả về JSON, không giải thích thêm.
+
+{history_section}CÂU HỎI HIỆN TẠI: {query}"""
+
         response = self.llm.chat.completions.create(
-            model=settings.LLM_MODEL,
+            model=settings.UTILITY_MODEL,  # 8B đủ cho classification task
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
+            temperature=0.0,              # FIX: 0.1 → 0.0 để deterministic
             response_format={"type": "json_object"},
         )
         try:
             return QueryAnalysis(**json.loads(response.choices[0].message.content))
-        except ValidationError:
-            return QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.5, entities=[])
+        except (ValidationError, Exception):
+            return QueryAnalysis(
+                intent="technical",
+                complexity_score=0.5,
+                ambiguity_score=0.5,
+                entities=[],
+            )

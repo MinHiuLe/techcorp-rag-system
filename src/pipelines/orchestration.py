@@ -59,6 +59,73 @@ class ProductionRAG:
             f"User: {m['user']}\nBot: {m['bot']}" for m in self.memory
         )
 
+    # ── Multi-topic Helpers ───────────────────────────────────────────────────────
+
+    def _is_multi_topic(self, query: str, analysis) -> bool:
+    
+        return query.count("?") >= 2 or analysis.complexity_score >= 0.8
+
+    def _decompose_query(self, query: str) -> list[str]:
+        prompt = f"""Tách câu hỏi sau thành các câu hỏi ĐỘC LẬP, mỗi câu về MỘT CHỦ ĐỀ DUY NHẤT.
+Yêu cầu:
+- Tối đa 3 câu hỏi con. Nếu câu hỏi chỉ cần 1-2 truy vấn là đủ, KHÔNG tách thêm.
+- Mỗi câu hỏi con trên 1 dòng riêng.
+- Giữ nguyên từ khóa kỹ thuật (Docker, VPN, AnyConnect...).
+- Câu hỏi con phải đủ ý để tìm kiếm độc lập.
+- KHÔNG tách các điều kiện logic của cùng 1 chủ đề thành câu hỏi riêng.
+- Chỉ trả về danh sách câu hỏi, KHÔNG đánh số, KHÔNG giải thích.
+
+CÂU HỎI GỐC: {query}"""
+
+        try:
+            response = self.groq_client.chat.completions.create(
+                model=settings.UTILITY_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=200,
+            )
+            lines = response.choices[0].message.content.strip().split("\n")
+            sub_queries = [
+                l.strip().lstrip("0123456789.-) ").strip()
+                for l in lines
+                if l.strip() and len(l.strip()) > 5
+            ]
+            if len(sub_queries) >= 2:
+                # FIX: cap tại 3 để tránh N encode calls gây latency spike
+                sub_queries = sub_queries[:3]
+                print(f"  [Decompose] {len(sub_queries)} sub-queries (capped at 3):")
+                for i, sq in enumerate(sub_queries, 1):
+                    print(f"    {i}. {sq}")
+                return sub_queries
+        except Exception as e:
+            print(f"  [Decompose] Lỗi → fallback: {e}")
+
+        return [query]
+
+    def _merge_docs(self, docs_per_query: list[list[dict]]) -> list[dict]:
+        """
+        Merge + dedup docs từ nhiều sub-queries.
+        Docs xuất hiện trong nhiều sub-query được ưu tiên lên đầu
+        (cross-query relevance signal).
+        """
+        count_map  = {}
+        seen_texts = set()
+        merged     = []
+
+        for docs in docs_per_query:
+            for doc in docs:
+                txt = doc["text"]
+                count_map[txt] = count_map.get(txt, 0) + 1
+                if txt not in seen_texts:
+                    seen_texts.add(txt)
+                    merged.append(doc)
+
+        merged.sort(key=lambda d: count_map[d["text"]], reverse=True)
+
+        total_in  = sum(len(d) for d in docs_per_query)
+        print(f"  [Merge] {total_in} docs → {len(merged)} sau dedup")
+        return merged
+
     # ── Core Pipeline ─────────────────────────────────────────────────────────────
 
     @traceable(run_type="chain", name="RAG_Core_Pipeline")
@@ -66,6 +133,7 @@ class ProductionRAG:
         query       = clean_text(raw_query)
         history_str = self._get_formatted_history()
 
+        # ── Embedding ─────────────────────────────────────────────────────────────
         query_embedding = self.dense_model.encode(query).tolist()
 
         # ── Semantic Cache ────────────────────────────────────────────────────────
@@ -75,7 +143,7 @@ class ProductionRAG:
                 self.memory.append({"user": query, "bot": cached_answer})
                 return cached_answer, "⚡ Semantic Cache Hit"
 
-        # ── Query Analysis ────────────────────────────────────────────────────────
+        # ── Query Analysis (1 call, dùng chung cho cả pipeline) ──────────────────
         analysis = self.analyzer.analyze(query, history_str)
 
         if analysis.intent == "general":
@@ -83,23 +151,47 @@ class ProductionRAG:
             final_context = ""
 
         else:
-            # ── Rewrite ──────────────────────────────────────────────────────────
-            search_query = self.rewriter.rewrite(query, analysis, history_str)
-
-            # ── Retrieval ─────────────────────────────────────────────────────────
             strategy, fetch_k = RetrievalStrategyEngine.get_strategy(analysis)
-            raw_docs = self.retriever.search(search_query, strategy, fetch_k)
+            is_multi          = self._is_multi_topic(query, analysis)
 
-            print(f"[DEBUG] raw_docs     : {len(raw_docs)} docs")
+            if is_multi:
+                sub_queries = self._decompose_query(query)
+                n_topics    = len(sub_queries)
+
+                MULTI_CHUNK_BUDGET = 15
+                fetch_k_per_sq     = max(5, MULTI_CHUNK_BUDGET // n_topics)
+                print(f"  [Multi] n_topics={n_topics} → fetch_k_per_sq={fetch_k_per_sq} (budget={MULTI_CHUNK_BUDGET})")
+
+                # Batch encode: 1 lần cho N sub-queries
+                dense_vecs  = self.dense_model.encode(sub_queries)  # shape (N, 1024)
+
+                docs_per_sq = []
+                for i, sq in enumerate(sub_queries):
+                    sq_docs = self.retriever.search_with_vec(
+                        sq, dense_vecs[i].tolist(), strategy, fetch_k_per_sq
+                    )
+                    print(f"  [SubQuery] '{sq[:55]}' → {len(sq_docs)} docs")
+                    docs_per_sq.append(sq_docs)
+
+                raw_docs = self._merge_docs(docs_per_sq)
+
+            else:
+
+                n_topics     = 1
+                search_query = self.rewriter.rewrite(query, analysis, history_str)
+                raw_docs     = self.retriever.search(search_query, strategy, fetch_k)
+
+            print(f"[DEBUG] raw_docs     : {len(raw_docs)} docs | n_topics={n_topics}")
 
             # ── Rerank ────────────────────────────────────────────────────────────
-            ranked_docs = self.policy.apply_policy(search_query, raw_docs, analysis)
+            ranked_docs = self.policy.apply_policy(
+                query, raw_docs, analysis, n_topics=n_topics
+            )
 
             print(f"[DEBUG] ranked_docs  : {len(ranked_docs)} docs after policy")
 
-            # Fallback: nếu rerank filter hết → giữ raw_docs top-3
             if not ranked_docs and raw_docs:
-                print("[WARN]  apply_policy trả về rỗng → fallback raw_docs[:3]")
+                print("[WARN]  Fallback raw_docs[:3]")
                 ranked_docs = raw_docs[:3]
 
             # ── Build Context ─────────────────────────────────────────────────────
@@ -139,15 +231,12 @@ if __name__ == "__main__":
 
     while True:
         user_input = input("👤 User: ")
-
         if user_input.lower() in ["exit", "q", "quit"]:
             print("Tạm biệt!")
             break
-
         try:
             result = app.process(user_input)
             print(f"\n🤖 Bot:\n{result}\n")
             print("-" * 50)
-
         except Exception as e:
             print(f"\n❌ [LỖI HỆ THỐNG]: {e}\n")

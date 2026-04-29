@@ -37,6 +37,7 @@ services:
       - ./storage:/app/storage
       - ./.env:/app/.env
       - .:/app
+    user: "${UID}:${GID}"
     depends_on:
       - qdrant
       - minio

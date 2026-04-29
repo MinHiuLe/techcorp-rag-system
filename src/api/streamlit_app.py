@@ -2,9 +2,6 @@ import streamlit as st
 import requests
 import os
 
-# ─────────────────────────────
-# CONFIG
-# ─────────────────────────────
 st.set_page_config(
     page_title="KnowBot · TechCorp",
     page_icon="💬",
@@ -13,9 +10,10 @@ st.set_page_config(
 
 API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
 
-# ─────────────────────────────
-# UI STYLE (NÂNG CẤP HIỆU ỨNG MƯỢT MÀ)
-# ─────────────────────────────
+# Timeout config — tăng lên 60s để handle multi-topic queries
+# Single-topic: ~5-8s | Multi-topic: ~12-20s | Buffer: đủ rộng
+REQUEST_TIMEOUT = 60
+
 st.markdown("""
 <style>
 :root {
@@ -29,7 +27,6 @@ st.markdown("""
     --transition-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* APP BACKGROUND */
 html, body, [data-testid="stAppViewContainer"] {
     background: var(--bg) !important;
     font-family: "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
@@ -42,19 +39,11 @@ html, body, [data-testid="stAppViewContainer"] {
     max-width: 760px;
 }
 
-/* KEYFRAMES */
 @keyframes reveal {
     0% { opacity: 0; transform: translateY(12px) scale(0.98); }
     100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes pulse-subtle {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-}
-
-/* HEADER */
 .kb-header {
     display: flex;
     align-items: center;
@@ -77,12 +66,10 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 8px 20px rgba(90, 169, 230, 0.3);
 }
 
-/* MESSAGE WRAPPER */
 .msg-wrap {
     display: flex;
     flex-direction: column;
     margin-bottom: 20px;
-    will-change: transform, opacity;
     animation: reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
@@ -95,7 +82,6 @@ html, body, [data-testid="stAppViewContainer"] {
     letter-spacing: 0.02em;
 }
 
-/* BUBBLE */
 .msg-bubble {
     padding: 14px 18px;
     border-radius: 20px;
@@ -104,11 +90,9 @@ html, body, [data-testid="stAppViewContainer"] {
     max-width: 85%;
     transition: var(--transition-smooth);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
-    position: relative;
     border: 1px solid transparent;
 }
 
-/* USER STYLE */
 .msg-user { align-items: flex-end; }
 .msg-user .msg-bubble {
     background: var(--primary);
@@ -117,7 +101,6 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 4px 15px rgba(90, 169, 230, 0.2);
 }
 
-/* BOT STYLE */
 .msg-bot { align-items: flex-start; }
 .msg-bot .msg-bubble {
     background: var(--panel);
@@ -126,7 +109,6 @@ html, body, [data-testid="stAppViewContainer"] {
     border-bottom-left-radius: 4px;
 }
 
-/* HOVER EFFECT - NHẸ NHÀNG */
 .msg-bubble:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
@@ -136,7 +118,31 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 10px 25px rgba(90, 169, 230, 0.3);
 }
 
-/* CHAT INPUT */
+.meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    margin-left: 4px;
+    flex-wrap: wrap;
+}
+
+.source-chip {
+    font-size: 0.7rem;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.latency-chip {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
 [data-testid="stChatInput"] {
     border-radius: 18px !important;
     border: 1px solid var(--border) !important;
@@ -152,7 +158,6 @@ html, body, [data-testid="stAppViewContainer"] {
     transform: translateY(-2px);
 }
 
-/* EMPTY STATE */
 .empty-hero {
     text-align: center;
     padding: 5rem 1rem;
@@ -164,24 +169,14 @@ html, body, [data-testid="stAppViewContainer"] {
     color: var(--text);
     letter-spacing: -0.02em;
 }
-
-/* LOADING SPINNER CUSTOM */
-.stSpinner > div {
-    border-top-color: var(--primary) !important;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────
-# STATE
-# ─────────────────────────────
+# ── State ─────────────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ─────────────────────────────
-# HEADER
-# ─────────────────────────────
+# ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="kb-header">
     <div class="kb-logo">KB</div>
@@ -192,61 +187,106 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────
-# RENDER MESSAGE
-# ─────────────────────────────
-def render_message(role, content, index):
-    cls = "msg-user" if role == "user" else "msg-bot"
+
+# ── Render ────────────────────────────────────────────────────────────────────
+def render_message(role: str, content: str, latency: float = None, source: str = None, index: int = 0):
+    cls   = "msg-user" if role == "user" else "msg-bot"
     label = "Bạn" if role == "user" else "KnowBot"
-    delay = min(index * 0.05, 0.5) 
-    
+    delay = min(index * 0.05, 0.5)
+
+    meta_html = ""
+    if role == "assistant":
+        chips = ""
+        if source:
+            for s in source.split(","):
+                s = s.strip()
+                if s:
+                    chips += f'<span class="source-chip">📄 {s}</span>'
+        lat_html = f'<span class="latency-chip">⏱ {latency}s</span>' if latency else ""
+        if chips or lat_html:
+            meta_html = f'<div class="meta-row">{chips}{lat_html}</div>'
+
     st.markdown(f"""
-    <div class="msg-wrap {cls}" style="animation-delay: {delay}s;">
+    <div class="msg-wrap {cls}" style="animation-delay:{delay}s">
         <div class="msg-label">{label}</div>
         <div class="msg-bubble">{content}</div>
+        {meta_html}
     </div>
     """, unsafe_allow_html=True)
 
-# ─────────────────────────────
-# HISTORY
-# ─────────────────────────────
+
+# ── History ───────────────────────────────────────────────────────────────────
 if not st.session_state.messages:
     st.markdown("""
     <div class="empty-hero">
-        <div style="font-size: 3rem; margin-bottom: 1rem;">👋</div>
+        <div style="font-size:3rem; margin-bottom:1rem;">👋</div>
         <h2>Xin chào!</h2>
-        <p style="color: #64748b; font-size: 1.05rem;">Tôi có thể giúp gì cho công việc của bạn hôm nay?</p>
+        <p style="color:#64748b; font-size:1.05rem;">
+            Tôi có thể giúp gì cho công việc của bạn hôm nay?
+        </p>
+        <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.5rem;">
+            Câu hỏi phức tạp (nhiều chủ đề) có thể mất 15–20s để xử lý.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 else:
     for i, m in enumerate(st.session_state.messages):
-        render_message(m["role"], m["content"], i)
+        render_message(
+            role    = m["role"],
+            content = m["content"],
+            latency = m.get("latency"),
+            source  = m.get("source"),
+            index   = i,
+        )
 
-# ─────────────────────────────
-# INPUT
-# ─────────────────────────────
+# ── Input ─────────────────────────────────────────────────────────────────────
 if prompt := st.chat_input("Nhập câu hỏi tại đây..."):
-
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
-# Logic xử lý API sau khi rerun để đảm bảo UI mượt
-if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "user":
+# Xử lý API sau rerun
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
-    
-    with st.spinner("Đang truy vấn dữ liệu..."):
+
+    # Hiển thị hint nếu query phức tạp (nhiều "?")
+    is_complex = last_prompt.count("?") >= 2
+    spinner_msg = (
+        "Đang xử lý câu hỏi phức tạp (multi-topic)... có thể mất 15–20s"
+        if is_complex
+        else "Đang truy vấn dữ liệu..."
+    )
+
+    with st.spinner(spinner_msg):
         try:
-            res = requests.post(API_URL, json={
-                "query": last_prompt,
-                "session_id": "user_123"
-            }, timeout=30)
+            res = requests.post(
+                API_URL,
+                json={"query": last_prompt, "session_id": "user_123"},
+                timeout=REQUEST_TIMEOUT,  # 60s thay vì 30s
+            )
 
             if res.status_code == 200:
-                answer = res.json().get("answer", "Không có phản hồi.")
+                data    = res.json()
+                answer  = data.get("answer", "Không có phản hồi.")
+                latency = data.get("latency_seconds")
+                source  = data.get("source")
             else:
-                answer = "Rất tiếc, đã có lỗi xảy ra khi kết nối hệ thống."
-        except Exception as e:
-            answer = f"Lỗi kết nối: {e}"
+                answer  = f"Rất tiếc, đã có lỗi xảy ra (HTTP {res.status_code})."
+                latency = None
+                source  = None
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+        except requests.exceptions.Timeout:
+            answer  = "⏱ Request timeout — câu hỏi quá phức tạp hoặc server đang bận. Hãy thử lại hoặc tách thành câu hỏi đơn giản hơn."
+            latency = None
+            source  = None
+        except Exception as e:
+            answer  = f"Lỗi kết nối: {e}"
+            latency = None
+            source  = None
+
+    st.session_state.messages.append({
+        "role"   : "assistant",
+        "content": answer,
+        "latency": latency,
+        "source" : source,
+    })
     st.rerun()
