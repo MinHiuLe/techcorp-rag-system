@@ -1,7 +1,6 @@
 # Môi trường ảo (Ngốn vài GB rác)
 venv/
 env/
-
 # File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
 .env
 

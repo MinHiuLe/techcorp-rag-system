@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 COOLDOWN_SECONDS = 60
 
 
+
 @dataclass
 class _KeySlot:
     api_key: str
