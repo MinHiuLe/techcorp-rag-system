@@ -20,6 +20,9 @@ app = FastAPI(
 
 rag_engine: ProductionRAG | None = None
 
+@app.get("/keys/status")
+async def key_status():
+    return rag_engine.groq_client.status()
 
 @app.on_event("startup")
 async def startup_event():

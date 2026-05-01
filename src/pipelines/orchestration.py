@@ -1,11 +1,10 @@
 import os
-from groq import Groq
 import cohere
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 from fastembed import SparseTextEmbedding
 from langsmith import traceable
-
+from config.groq_rotator import GroqRotatorClient as Groq
 from config.settings import settings
 from src.core.analyzer import QueryAnalyzer
 from src.core.rewriter import QueryRewriter
