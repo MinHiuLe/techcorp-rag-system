@@ -1,62 +1,62 @@
 [
   {
-    "question": "TechCorp quy định sử dụng những base image nào cho Docker?",
-    "ground_truth": "Chỉ được phép sử dụng các base image an toàn: alpine, debian:slim, ubuntu LTS. Không dùng image không rõ nguồn gốc và không dùng tag 'latest' trong production."
+    "question": "TechCorp sử dụng phần mềm bảo mật nào trên laptop của nhân viên?",
+    "ground_truth": "IT cài đặt phần mềm bảo mật CrowdStrike, BitLocker/FileVault trên laptop."
   },
   {
-    "question": "Hạn mức in mỗi tháng cho mỗi nhân viên TechCorp là bao nhiêu điểm?",
-    "ground_truth": "Mỗi nhân viên được 200 điểm in mỗi tháng, reset vào ngày 1."
-  },
-  {
-    "question": "Nhân viên TechCorp có thể tự ý nâng cấp RAM/SSD cho laptop công ty không?",
-    "ground_truth": "Không, việc này làm mất bảo hành và vi phạm chính sách. Mọi nâng cấp phải do IT thực hiện."
-  },
-  {
-    "question": "Địa chỉ server VPN TechCorp-AnyConnect là gì?",
-    "ground_truth": "Địa chỉ server: vpn.techcorp.com"
-  },
-  {
-    "question": "Trong sales pipeline, giai đoạn Proposal Sent có xác suất closing là bao nhiêu?",
-    "ground_truth": "Xác suất closing là 40%."
-  },
-  {
-    "question": "Làm thế nào để in tài liệu mật mà không lưu lại trên máy in?",
-    "ground_truth": "Sử dụng chức năng Secure Print: trong driver chọn 'Print → Job Type → Secure Print', nhập mã PIN 4 số, sau đó đến máy in nhập PIN để in ngay."
-  },
-  {
-    "question": "Nếu đã click vào link lừa đảo, hành động đầu tiên nhân viên cần làm là gì?",
-    "ground_truth": "Ngắt kết nối mạng ngay lập tức (tắt Wi-Fi, rút cáp mạng)."
-  },
-  {
-    "question": "Nhân viên quên mật khẩu AD và không thể đăng nhập máy tính thì liên hệ ai?",
-    "ground_truth": "Liên hệ IT Support qua số 8888 hoặc nhờ đồng nghiệp tạo ticket Jira (dự án IT-Support, loại Password Reset)."
-  },
-  {
-    "question": "Weighted pipeline được tính như thế nào?",
-    "ground_truth": "Weighted Pipeline được tính bằng tổng (giá trị deal * xác suất closing theo stage)."
+    "question": "Nhân viên có được phép giữ lại laptop sau khi nghỉ việc không?",
+    "ground_truth": "Không. Tất cả tài sản công ty phải được hoàn trả, trừ khi có thỏa thuận mua lại bằng văn bản và được CFO phê duyệt."
   },
   {
     "question": "Ai chịu trách nhiệm thay mực in khi máy báo hết?",
-    "ground_truth": "IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Nhân viên chỉ cần báo qua ticket nếu máy báo lỗi hơn 1 ngày chưa xử lý."
+    "ground_truth": "IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Nhân viên không cần tự thay, chỉ cần báo qua ticket nếu máy báo lỗi hơn 1 ngày chưa được xử lý."
   },
   {
-    "question": "Tôi vừa mới vào công ty, muốn xin một cái laptop mới để làm việc thì phải làm thế nào?",
-    "ground_truth": "Nhân viên mới: HR gửi yêu cầu đến IT qua Jira Service Management (dự án Hardware-Request) trước ngày nhận việc 5 ngày làm việc. Sau đó ký biên bản bàn giao và IT cài đặt hệ điều hành chuẩn."
+    "question": "Nếu nhân viên nghi ngờ email phishing nhưng chưa click vào link, quy trình xử lý gồm những bước nào?",
+    "ground_truth": "1. Chụp màn hình email (che dấu thông tin cá nhân nếu cần). 2. Chuyển tiếp email (dưới dạng attachment) đến địa chỉ phishing@techcorp.com. 3. Xóa email khỏi hộp thư và thư mục đã xóa."
   },
   {
-    "question": "Trường hợp nào thì nhân viên bị khấu trừ lương do vấn đề thiết bị?",
-    "ground_truth": "Mất phụ kiện (sạc, dây cáp) khi thu hồi thiết bị sẽ bị khấu trừ vào lương cuối kỳ theo bảng giá nội bộ."
+    "question": "Một nhân viên đã nhập mật khẩu vào trang phishing. Họ cần làm gì ngay sau đó?",
+    "ground_truth": "Đổi mật khẩu AD và tất cả mật khẩu có liên quan (email, VPN, Jira, GitHub) ngay lập tức; kích hoạt MFA lại nếu bị vô hiệu hóa; thông báo cho Security Team để họ kiểm tra log đăng nhập và thu hồi session."
   },
   {
-    "question": "Sau khi nghỉ ốm, tôi cần nộp giấy tờ gì và trong bao lâu?",
-    "ground_truth": "Nộp bản scan giấy chứng nhận nghỉ việc qua HRMS trong vòng 7 ngày kể từ ngày trở lại làm việc. Nếu quá hạn, ngày nghỉ đó sẽ chuyển thành nghỉ phép năm (nếu còn) hoặc nghỉ không lương."
+    "question": "Sự khác biệt chính giữa mạng Wi-Fi TechCorp_5G và TechCorp_Guest là gì?",
+    "ground_truth": "TechCorp_5G dành cho nhân viên, sử dụng xác thực mật khẩu cá nhân + 802.1X (RADIUS), đồng bộ với mật khẩu AD. TechCorp_Guest dành cho khách và thiết bị IoT, sử dụng mật khẩu chung thay đổi hàng tuần, lấy từ reception."
   },
   {
-    "question": "TechCorp cho phép dùng Docker image tag latest trong production chứ?",
-    "ground_truth": "Không. Quy định bắt buộc: không dùng tag 'latest' trong production, phải cố định version image."
+    "question": "Nhân viên quên mật khẩu Wi-Fi TechCorp_5G nhưng vẫn đăng nhập được vào máy tính công ty, họ có thể tự xem lại mật khẩu ở đâu?",
+    "ground_truth": "Truy cập https://portal.techcorp.local/selfservice/wifi, đăng nhập bằng tài khoản công ty, chọn 'Hiển thị mật khẩu Wi-Fi hiện tại', hệ thống sẽ gửi mật khẩu qua email công ty."
   },
   {
-    "question": "Mật khẩu Wi-Fi có thay đổi không?",
-    "ground_truth": "Có. Mật khẩu Wi-Fi thay đổi mỗi 90 ngày hoặc khi bạn đổi mật khẩu AD. Hệ thống sẽ gửi email nhắc nhở trước 7 ngày."
+    "question": "Để được cấp quyền Project Manager trong Jira, cần những phê duyệt nào?",
+    "ground_truth": "Phải có phê duyệt từ Head of Department và Security Team review bắt buộc."
+  },
+  {
+    "question": "Hợp đồng của khách hàng ở giai đoạn Legal/Procurement có thời gian tối đa là bao lâu trước khi bị coi là chậm tiến độ?",
+    "ground_truth": "Thời gian tối đa cho phép ở stage Legal/Procurement là 15 ngày. Nếu quá thời hạn mà không có tiến triển, AE phải báo cáo hàng ngày lên VP of Sales qua email."
+  },
+  {
+    "question": "Trong Docker, TechCorp nghiêm cấm sử dụng loại image tag nào trong môi trường production?",
+    "ground_truth": "Cấm dùng tag 'latest' trong production, phải cố định version image."
+  },
+  {
+    "question": "Khi kết nối VPN báo lỗi 'Connection timeout', nguyên nhân phổ biến nhất theo tài liệu là gì?",
+    "ground_truth": "Tường lửa chặn hoặc sai server."
+  },
+  {
+    "question": "Một nhân viên muốn yêu cầu cấp màn hình phụ Dell UltraSharp 27\" 4K. Họ cần làm gì và ai phê duyệt?",
+    "ground_truth": "Tạo ticket trên Jira (Hardware-Request), ghi rõ lý do (ví dụ: cần màn hình rộng cho lập trình giao diện). Manager duyệt, sau đó IT cấp."
+  },
+  {
+    "question": "Một nhân viên bị đánh giá hiệu suất cuối năm ở mức 'Cần cải thiện mạnh' (điểm <2.5). Họ sẽ bị ảnh hưởng thế nào về thưởng và cơ hội đào tạo bắt buộc về bảo mật (giả sử điểm Tuân thủ & đạo đức của họ là 2.8)?",
+    "ground_truth": "Hệ số thưởng KPI là 0.5, có thể bị đưa vào diện PIP (Performance Improvement Plan) kéo dài 60 ngày. Về đào tạo bảo mật: vì điểm Tuân thủ & đạo đức 2.8 < 3.0, họ bắt buộc phải học lại khóa 'Nhận biết email Phishing và báo cáo IT' trong vòng 30 ngày."
+  },
+  {
+    "question": "Liệt kê các hành vi bị cấm theo Chính sách bảo mật TechCorp.",
+    "ground_truth": "Truy cập trái phép vào hệ thống; cố gắng bypass security; chia sẻ thông tin nội bộ ra bên ngoài; sử dụng tài nguyên công ty cho mục đích cá nhân không được phép."
+  },
+  {
+    "question": "Một nhân viên vừa bị đánh giá 'Cần cải thiện mạnh' vừa muốn nghỉ phép năm 5 ngày trong đợt blackout của phòng Sales. Điều gì sẽ xảy ra nếu anh ta vẫn nghỉ?",
+    "ground_truth": "Nếu nghỉ trong blackout mà không có lý do bất khả kháng (ốm đau, tang lễ), ngày nghỉ sẽ bị tính là nghỉ không lương và ảnh hưởng đến điểm đánh giá cuối năm."
   }
 ]
