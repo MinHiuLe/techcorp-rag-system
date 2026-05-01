@@ -9,21 +9,6 @@ class RerankPolicyEngine:
         self.is_eval_mode = settings.EVAL_MODE
 
     def _get_top_k(self, analysis: QueryAnalysis, n_topics: int = 1) -> int:
-        """
-        Adaptive top_k dựa trên complexity VÀ số lượng topic.
-
-        Trước đây:
-          complexity < 0.65 → top_k=3  ← quá thấp cho multi-topic query
-          complexity >= 0.65 → top_k=4
-
-        Sau fix:
-          Mỗi topic cần ít nhất 2 chunks để có đủ context.
-          top_k = base_k × n_topics, cap tại 8 để tránh context quá dài.
-
-        VD: Docker + VPN (2 topics, complexity=0.8)
-          base_k = 3, n_topics = 2 → top_k = min(6, 8) = 6
-          → mỗi topic có ~3 chunks thay vì tranh nhau 3 chunks
-        """
         complexity = analysis.complexity_score
 
         if complexity < 0.3:
@@ -36,6 +21,55 @@ class RerankPolicyEngine:
         top_k = min(base_k * n_topics, 8)  # cap tại 8
         return top_k
 
+    def _balance_by_source(
+        self,
+        ranked_docs: list,
+        top_k: int,
+        n_topics: int,
+    ) -> list:
+
+        if n_topics <= 1:
+            return ranked_docs[:top_k]
+
+        # Group by source, giữ nguyên Cohere rank order trong từng group
+        by_source: dict[str, list] = {}
+        for doc in ranked_docs:
+            by_source.setdefault(doc["source"], []).append(doc)
+
+        n_sources = len(by_source)
+        if n_sources <= 1:
+            # Tất cả cùng 1 file → không cần balance
+            return ranked_docs[:top_k]
+
+        # min_per_source: 2 nếu budget đủ, fallback 1
+        min_per_source = max(1, min(2, top_k // n_sources))
+
+        balanced   = []
+        used_texts = set()
+
+        # Pass 1: guaranteed slots — 2 chunks tốt nhất từ mỗi source
+        for docs in by_source.values():
+            for doc in docs[:min_per_source]:
+                if doc["text"] not in used_texts:
+                    balanced.append(doc)
+                    used_texts.add(doc["text"])
+
+        # Pass 2: fill remaining slots theo Cohere rank order
+        for doc in ranked_docs:
+            if len(balanced) >= top_k:
+                break
+            if doc["text"] not in used_texts:
+                balanced.append(doc)
+                used_texts.add(doc["text"])
+
+        sources_in_result = {d["source"] for d in balanced}
+        print(
+            f"  [Balance] {n_sources} nguồn → "
+            f"{len(balanced)} chunks từ {len(sources_in_result)} file: "
+            f"{', '.join(sources_in_result)}"
+        )
+        return balanced
+
     @traceable(run_type="tool", name="Cohere_Adaptive_Reranker")
     def apply_policy(
         self,
@@ -43,12 +77,13 @@ class RerankPolicyEngine:
         documents: list,
         analysis: QueryAnalysis,
         n_topics: int = 1,
+        top_k_override: int | None = None,
     ) -> list:
         if not documents:
             return []
 
-        top_k        = self._get_top_k(analysis, n_topics)
-        docs_to_rank = documents[:15]  
+        top_k = top_k_override if top_k_override is not None else self._get_top_k(analysis, n_topics)
+        docs_to_rank = documents[:15]
         docs_str     = [f"SOURCE: {d['source']}\n{d['text']}" for d in docs_to_rank]
 
         reranked = self.reranker.rerank(
@@ -58,10 +93,12 @@ class RerankPolicyEngine:
             top_n=top_k,
         )
 
-        final_docs = [docs_to_rank[r.index] for r in reranked.results]
+        ranked_docs = [docs_to_rank[r.index] for r in reranked.results]
 
-        if not final_docs and documents:
-            final_docs = [documents[0]]
+        if not ranked_docs and documents:
+            ranked_docs = documents[:top_k]
+
+        final_docs = self._balance_by_source(ranked_docs, top_k, n_topics)
 
         print(
             f"  [Policy] complexity={analysis.complexity_score:.2f} "

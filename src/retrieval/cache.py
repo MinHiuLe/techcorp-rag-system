@@ -11,6 +11,10 @@ NO_ANSWER_PHRASES = [
     "không đủ thông tin",
     "no information",
     "not found",
+    # Câu chào hỏi mặc định (intent=general) — không được cache
+    "xin chào! tôi là hệ thống",
+    "tôi là hệ thống ai nội bộ",
+    "xin chào! tôi là ai",
 ]
 
 
@@ -39,6 +43,36 @@ class SemanticCache:
         if os.path.exists(self.cache_file):
             os.remove(self.cache_file)
             print(f"  [Cache] Cleared in-memory + disk: {self.cache_file}")
+
+    def validate_and_clean(self) -> None:
+        """
+        Scan toàn bộ cache, xóa các entry bị nhiễm độc (poisoned).
+
+        Entry bị coi là poisoned nếu answer chứa bất kỳ NO_ANSWER_PHRASES nào.
+        Gọi khi startup để tự động dọn dẹp cache từ version cũ.
+
+        VD lỗi đã xảy ra: "mình bị công ty đánh giá..." bị classifier cũ
+        phân loại nhầm là intent=general → cache lưu "Xin chào! Tôi là..."
+        → mọi query tương tự sau đó đều nhận được câu chào sai.
+        """
+        original_len = len(self.cache_data)
+        clean_data   = []
+
+        for item in self.cache_data:
+            normalized = item.get("answer", "").strip().lower()
+            is_bad     = any(phrase in normalized for phrase in NO_ANSWER_PHRASES)
+            if is_bad:
+                print(f"  [Cache] 🧹 Removed poisoned entry: '{item.get('query', '')[:60]}...'")
+            else:
+                clean_data.append(item)
+
+        removed = original_len - len(clean_data)
+        if removed > 0:
+            self.cache_data = clean_data
+            self._save_cache()
+            print(f"  [Cache] validate_and_clean: removed {removed} poisoned entries.")
+        else:
+            print(f"  [Cache] validate_and_clean: cache sạch ({original_len} entries OK).")
 
     # ── Similarity ───────────────────────────────────────────────────────────────
 

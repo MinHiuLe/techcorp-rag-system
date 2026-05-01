@@ -26,7 +26,7 @@ class QueryRewriter:
         - entity mismatch THỰC SỰ (hơn nửa entities thiếu, không phải 1 entity)
         """
         needs_rewrite = (
-            analysis.complexity_score >= 0.5       
+            analysis.complexity_score >= 0.58       
             or analysis.ambiguity_score >= 0.4     
             or self._has_entity_mismatch(query, analysis.entities)
         )
@@ -50,7 +50,7 @@ LỊCH SỬ HỘI THOẠI GẦN ĐÂY:
 CÂU HỎI HIỆN TẠI: {query}"""
 
         response = self.llm.chat.completions.create(
-            model=settings.LLM_MODEL,
+            model=settings.UTILITY_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,    
         )
