@@ -2,8 +2,6 @@
 venv/
 env/
 
-config/groq_rotator.py
-
 # File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
 .env
 
