@@ -20,18 +20,19 @@ os.environ["EVAL_MODE"] = "true"
 
 from src.pipelines.orchestration import ProductionRAG
 from evaluation.eval_schemas import CombinedEvalResult, ContextRecallResult
-from evaluation.eval_prompts import COMBINED_EVAL_PROMPT, CONTEXT_RECALL_PROMPT
+from evaluation.eval_prompts import COMBINED_EVAL_PROMPT, CONTEXT_RECALL_PROMPT, COMPLETENESS_PROMPT
 
 from config.groq_rotator import GroqRotatorClient
 
 
 # ── Config ──────────────────────────────────────────────────────────────────────
-JUDGE_MODEL = "llama-3.1-8b-instant"
+# CHANGED: Nâng judge model lên 70B để tránh default 0.50
+JUDGE_MODEL = "llama-3.3-70b-versatile"
 
 EVAL_CONFIG = {
     "n_clusters"       : 5,
     "per_cluster"      : 4,
-    "context_max_chars": 2500,   
+    "context_max_chars": 2500,
     "dataset_name"     : "TechCorp_IT_Onboarding_GT",
     "sleep_min"        : 2.0,
     "sleep_max"        : 4.0,
@@ -68,7 +69,33 @@ def stratified_sample(all_examples: list, n_clusters: int, per_cluster: int) -> 
     return sampled
 
 
-# ── Context Recall: LLM-based (khắt khe hơn embedding) ─────────────────────────
+# ── NEW: Heuristic Answer Relevance (embedding-based, no LLM cost) ─────────────
+
+def heuristic_answer_relevance(question: str, answer: str) -> float:
+    """
+    Đo độ liên quan giữa câu hỏi và câu trả lời bằng embedding similarity.
+    Không cần ground truth, không cần LLM judge → tránh bias 0.50.
+    """
+    if not answer or not question:
+        return 0.0
+    
+    q_vec = embed_model.encode([question])[0]
+    a_vec = embed_model.encode([answer])[0]
+    
+    sim = np.dot(q_vec, a_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(a_vec) + 1e-9)
+    
+    # Scale: <0.3 → thấp, 0.3-0.5 → trung bình, >0.7 → cao
+    if sim < 0.30:
+        return round(float(sim), 2)
+    elif sim < 0.50:
+        return round(0.25 + (sim - 0.30) * 2.5, 2)
+    elif sim < 0.70:
+        return round(0.75 + (sim - 0.50) * 1.25, 2)
+    else:
+        return 1.0
+
+
+# ── Context Recall: LLM-based ───────────────────────────────────────────────────
 
 def _is_daily_limit_error(error_str: str) -> bool:
     daily_keywords = ["tokens per day", "daily limit", "quota exceeded", "daily quota"]
@@ -76,7 +103,6 @@ def _is_daily_limit_error(error_str: str) -> bool:
 
 
 def _call_judge(prompt: str, schema_class=None) -> dict | None:
-    """Gọi judge LLM với retry và error handling."""
     try:
         response = judge_llm.chat.completions.create(
             model=JUDGE_MODEL,
@@ -108,10 +134,6 @@ def _call_judge(prompt: str, schema_class=None) -> dict | None:
 
 
 def llm_context_recall(question: str, context: str, ground_truth: str) -> float:
-    """
-    Dùng LLM để đếm số ý then chốt trong GT được cover bởi context.
-    Trả về float 0.0–1.0.
-    """
     if not context or not ground_truth:
         return 0.0
 
@@ -132,11 +154,9 @@ def llm_context_recall(question: str, context: str, ground_truth: str) -> float:
 
 
 def _embedding_fallback(context: str, ground_truth: str) -> float:
-    """Sentence-level embedding với threshold cao hơn."""
     if not context or not ground_truth:
         return 0.0
 
-    # Tách GT thành sentences
     sentences = [s.strip() for s in re.split(r'[.!?;]', ground_truth) if len(s.strip()) > 5]
     if not sentences:
         sentences = [ground_truth]
@@ -202,12 +222,14 @@ def evaluate_all(run, example) -> list:
             {"key": "context_precision",   "score": 0.0, "comment": "EMPTY_CONTEXT"},
             {"key": "strict_faithfulness", "score": 0.0, "comment": "EMPTY_CONTEXT"},
             {"key": "answer_relevance",    "score": 0.0, "comment": "EMPTY_CONTEXT"},
+            {"key": "answer_completeness", "score": 0.0, "comment": "EMPTY_CONTEXT"},
         ]
 
     truncated = context[:EVAL_CONFIG["context_max_chars"]]
     if len(context) > EVAL_CONFIG["context_max_chars"]:
         truncated += "\n...[truncated]"
 
+    # ── Combined judge: precision + faithfulness ──────────────────────────────
     prompt = COMBINED_EVAL_PROMPT.format(
         question=question,
         ground_truth=ground_truth,
@@ -222,6 +244,7 @@ def evaluate_all(run, example) -> list:
             {"key": "context_precision",   "score": -1,     "comment": "DAILY_LIMIT_HIT"},
             {"key": "strict_faithfulness", "score": -1,     "comment": "DAILY_LIMIT_HIT"},
             {"key": "answer_relevance",    "score": -1,     "comment": "DAILY_LIMIT_HIT"},
+            {"key": "answer_completeness", "score": -1,     "comment": "DAILY_LIMIT_HIT"},
         ]
 
     if not scores:
@@ -230,27 +253,38 @@ def evaluate_all(run, example) -> list:
             {"key": "context_precision",   "score": 0.0,    "comment": "JUDGE_ERROR"},
             {"key": "strict_faithfulness", "score": 0.0,    "comment": "JUDGE_ERROR"},
             {"key": "answer_relevance",    "score": 0.0,    "comment": "JUDGE_ERROR"},
+            {"key": "answer_completeness", "score": 0.0,    "comment": "JUDGE_ERROR"},
         ]
 
     reasoning = scores.get("reasoning", "")
     cp = float(scores.get("context_precision", 0))
     sf = float(scores.get("strict_faithfulness", 0))
-    ar = float(scores.get("answer_relevance", 0))
 
-    # ── AUTO-PENALTY: Bắt judge "dễ dãi" ──
+    # ── NEW: Answer relevance = heuristic (embedding, no LLM bias) ────────────
+    relevance = heuristic_answer_relevance(question, answer)
+    print(f"  [Relevance] embedding sim → {relevance:.2f}")
+
+    # ── NEW: Answer completeness = LLM đếm ý thiếu (prompt đơn giản hơn) ─────
+    completeness_prompt = COMPLETENESS_PROMPT.format(
+        ground_truth=ground_truth,
+        answer=answer,
+    )
+    comp_result = _call_judge(completeness_prompt)
+    if comp_result:
+        completeness = float(comp_result.get("completeness", 0.0))
+        comp_reasoning = comp_result.get("reasoning", "")
+    else:
+        completeness = 0.0
+        comp_reasoning = "JUDGE_ERROR"
+
+    # ── Auto-penalty (giữ nguyên) ─────────────────────────────────────────────
     penalties = []
 
-    # Penalty 1: Answer quá ngắn so với GT nhưng relevance cao
-    if answer_gt_ratio < 0.4 and ar > 0.6:
-        ar = max(ar * 0.5, 0.25)
-        penalties.append(f"SHORT_ANSWER_PENALTY(ar→{ar:.2f})")
-
-    # Penalty 2: Bot nói "không có thông tin" nhưng GT có đáp án
     if "không có thông tin" in answer.lower() and len(ground_truth) > 20:
-        ar = 0.0
-        penalties.append("NO_INFO_BUT_GT_EXISTS(ar→0.0)")
+        relevance = 0.0
+        completeness = 0.0
+        penalties.append("NO_INFO_BUT_GT_EXISTS")
 
-    # Penalty 3: Faithfulness cao nhưng context rỗng/thiếu → nghi ngờ hallucination
     if sf > 0.8 and recall < 0.3:
         sf = max(sf * 0.5, 0.0)
         penalties.append(f"LOW_RECALL_HIGH_FAITH(sf→{sf:.2f})")
@@ -258,13 +292,14 @@ def evaluate_all(run, example) -> list:
     if penalties:
         print(f"  [Penalty] {' | '.join(penalties)}")
 
-    print(f"  [Scores]  recall={recall:.2f} | precision={cp:.2f} | faith={sf:.2f} | relevance={ar:.2f}")
+    print(f"  [Scores]  recall={recall:.2f} | precision={cp:.2f} | faith={sf:.2f} | relevance={relevance:.2f} | completeness={completeness:.2f}")
 
     return [
         {"key": "context_recall",      "score": round(recall, 2), "comment": reasoning},
         {"key": "context_precision",   "score": round(cp, 2),     "comment": reasoning},
         {"key": "strict_faithfulness", "score": round(sf, 2),     "comment": reasoning},
-        {"key": "answer_relevance",    "score": round(ar, 2),     "comment": reasoning},
+        {"key": "answer_relevance",    "score": round(relevance, 2), "comment": f"embedding-based (Q-A sim)"},
+        {"key": "answer_completeness", "score": round(completeness, 2), "comment": comp_reasoning},
     ]
 
 
@@ -289,7 +324,7 @@ if __name__ == "__main__":
         run_rag_pipeline,
         data=sampled_examples,
         evaluators=[evaluate_all],
-        experiment_prefix="TechCorp-RAG-Eval-v5-Harsh",
+        experiment_prefix="TechCorp-RAG-Eval-v5.2-SplitMetrics",
         max_concurrency=1,
     )
 

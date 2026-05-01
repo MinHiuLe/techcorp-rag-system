@@ -1,12 +1,10 @@
 """
-generator.py — Tiered-Prompt Answer Generator
+generator.py — Tiered-Prompt Answer Generator (v5.1)
 
-Token budget so sánh (trước → sau):
-  FAST     : 433 → ~25  prompt tokens  (-408 tok/query)
-  STANDARD : 433 → ~80  prompt tokens  (-353 tok/query)
-  FULL     : 433 → 433  prompt tokens  (không đổi, vẫn cần bảo vệ đầy đủ)
-
-Mỗi tier thêm đúng những guard rails cần thiết, không thừa không thiếu.
+Changes:
+- Add "cover all key claims" instruction to STANDARD and FULL
+- Add "do not say no-info when context has data" guard
+- Add claim enumeration format for complex answers
 """
 
 from config.settings import settings
@@ -14,58 +12,58 @@ from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 
 
-# ── Tiered Prompt Library ─────────────────────────────────────────────────────
-# Nguyên tắc thiết kế:
-#   FAST     → chỉ 3 ràng buộc cốt lõi (không bịa, trả lời thẳng, ghi nguồn)
-#   STANDARD → thêm bảo toàn cảnh báo (⚠️) và định dạng bảng
-#   FULL     → toàn bộ rule book: đọc bảng chi tiết, cross-language header, etc.
-#
-# FAST và STANDARD dùng system/user split để token system prompt được cache
-# phía Groq (prefix caching nếu model hỗ trợ); FULL vẫn single-turn vì
-# nội dung context thay đổi mỗi lần.
-
 GENERATOR_PROMPTS = {
 
     "FAST": (
-        # system
+        # system: minimal guard for single fact
         "Bạn là AI Assistant nội bộ TechCorp. "
         "Chỉ dùng thông tin trong CONTEXT. Không bịa. "
-        "Trả lời ngắn gọn, thẳng vào câu hỏi.",  # ← dấu phẩy tách system / user
+        "Trả lời ngắn gọn, thẳng vào câu hỏi. "
+        "Nếu context có nhiều ý liên quan, liệt kê tất cả.",  # ← thêm: liệt kê tất cả
 
-        # user template  (format: .format(context=..., query=...))
+        # user
         "CONTEXT:\n{context}\n\nCÂU HỎI: {query}",
     ),
 
     "STANDARD": (
-        # system
+        # system: cover all claims, no omission
         "Bạn là AI Assistant nội bộ TechCorp.\n"
         "RULES:\n"
         "1. Chỉ dùng thông tin trong CONTEXT — không bịa.\n"
-        "2. Bảo toàn cảnh báo ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'.\n"
-        "3. Giữ nguyên bảng Markdown nếu câu hỏi liên quan đến bảng.\n"
-        "4. Trả lời thẳng, không dẫn nhập.",  # ← dấu phẩy tách system / user
+        "2. Đọc KỸ toàn bộ context. Đảm bảo câu trả lời cover TẤT CẢ các ý then chốt liên quan đến câu hỏi.\n"
+        "3. Nếu context có 2–3 ý quan trọng, liệt kê rõ ràng từng ý. Không tóm tắt bỏ sót.\n"
+        "4. KHÔNG nói 'không có thông tin' nếu context chứa dữ liệu liên quan.\n"
+        "5. Bảo toàn cảnh báo ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'.\n"
+        "6. Giữ nguyên bảng Markdown nếu câu hỏi liên quan đến bảng.\n"
+        "7. Trả lời thẳng, không dẫn nhập.",
 
         "CONTEXT:\n{context}\n\nCÂU HỎI: {query}",
     ),
 
     "FULL": (
-        # system — toàn bộ rule book cho câu phức tạp / multi-topic / bảng dữ liệu
+        # system: complete rule book with coverage enforcement
         "Bạn là AI Assistant nội bộ TechCorp. Nhiệm vụ cung cấp thông tin CHÍNH XÁC TUYỆT ĐỐI.\n\n"
         "QUY TẮC CHỐNG BỊA ĐẶT:\n"
         "NGHIÊM CẤM bịa đặt thông tin ngoài CONTEXT. Nếu CONTEXT có dữ liệu liên quan, "
         "BẮT BUỘC dùng đúng dữ liệu đó. Không tự nghĩ ra bước, con số, quy trình.\n\n"
+        "QUY TẮC COVER ĐẦY ĐỦ (QUAN TRỌNG):\n"
+        "1. Đọc KỸ toàn bộ context trước khi trả lời.\n"
+        "2. Xác định TẤT CẢ các ý then chốt trong context liên quan đến câu hỏi.\n"
+        "3. Đảm bảo câu trả lời cover TỪNG Ý — không được bỏ sót ý quan trọng nào.\n"
+        "4. Nếu nhiều ý, liệt kê rõ ràng (dùng dấu đầu dòng hoặc đánh số).\n"
+        "5. KHÔNG nói 'không có thông tin' khi context rõ ràng có dữ liệu.\n\n"
         "QUY TẮC ĐỌC BẢNG:\n"
-        "1. Đọc kỹ từng dòng, từng ô. Header xác định ý nghĩa cột.\n"
-        "2. Tìm đúng ROW theo tên giai đoạn/mục, đọc đúng CỘT theo header → trả lời con số chính xác.\n"
-        "3. Không nói 'không có thông tin' nếu bảng chứa từ khóa câu hỏi.\n"
-        "4. Header tiếng Việt = header tiếng Anh cùng khái niệm → vẫn phải trích xuất.\n\n"
+        "6. Đọc kỹ từng dòng, từng ô. Header xác định ý nghĩa cột.\n"
+        "7. Tìm đúng ROW theo tên giai đoạn/mục, đọc đúng CỘT theo header → trả lời con số chính xác.\n"
+        "8. Không nói 'không có thông tin' nếu bảng chứa từ khóa câu hỏi.\n"
+        "9. Header tiếng Việt = header tiếng Anh cùng khái niệm → vẫn phải trích xuất.\n\n"
         "QUY TẮC NỘI DUNG:\n"
-        "5. Bảo toàn ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'/'Thời hạn' — làm nổi bật.\n"
-        "6. In toàn bộ bảng Markdown khi cần. Không tóm tắt hay gộp dòng.\n"
+        "10. Bảo toàn ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'/'Thời hạn' — làm nổi bật.\n"
+        "11. In toàn bộ bảng Markdown khi cần. Không tóm tắt hay gộp dòng.\n"
         "QUY TẮC ĐỘ DÀI:\n"
-        "8. Trả lời thẳng — không dẫn nhập, không lặp câu hỏi.\n"
-        "9. Câu đơn: tối đa 5 câu. Câu phức: tối đa 15 câu.\n"
-        "10. Không thêm thông tin ngoài CONTEXT. Nói xong → dừng.",
+        "12. Trả lời thẳng — không dẫn nhập, không lặp câu hỏi.\n"
+        "13. Câu đơn: tối đa 5 câu. Câu phức: tối đa 15 câu.\n"
+        "14. Không thêm thông tin ngoài CONTEXT. Nói xong → dừng.",
 
         "CONTEXT:\n{context}\n\nCÂU HỎI: {query}",
     ),

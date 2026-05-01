@@ -27,6 +27,31 @@ Trả về JSON:
 }}
 """
 
+# NEW: Prompt đơn giản chỉ để đếm ý thiếu (tránh bias 0.50 của 8B)
+COMPLETENESS_PROMPT = """Bạn là trợ lý đếm ý. So sánh GROUND TRUTH với CÂU TRẢ LỜI.
+
+Ground truth: {ground_truth}
+Câu trả lời: {answer}
+
+HƯỚNG DẪN:
+1. Tách ground truth thành các ý then chốt (mỗi ý 1 mệnh đề ngắn).
+2. Kiểm tra xem mỗi ý có xuất hiện trong câu trả lời không.
+3. Đếm số ý CÓ và số ý KHÔNG.
+
+VÍ DỤ:
+Ground truth: "IT thay mực. Nhân viên báo ticket nếu >1 ngày."
+Câu trả lời: "IT thay mực."
+→ Ý 1: "IT thay mực" ✓ | Ý 2: "báo ticket nếu >1 ngày" ✗
+→ completeness = 1/2 = 0.5
+
+Trả về JSON:
+{{
+  "reasoning": "Liệt kê từng ý ✓/✗...",
+  "completeness": <float 0.0-1.0>
+}}
+"""
+
+# Prompt chính — gộp precision + faithfulness (KHÔNG bao gồm relevance nữa)
 COMBINED_EVAL_PROMPT = """Bạn là giám khảo KHẮT KHE đánh giá hệ thống RAG. ĐỪNG cho điểm cao chỉ vì câu trả lời "nghe có vẻ đúng". Nếu thiếu thông tin quan trọng so với ground truth → PHẢI trừ điểm.
 
 ═══════════════════════════════════════════════════════════════
@@ -55,25 +80,25 @@ VÍ DỤ CHẤM ĐIỂM:
 Ground truth: "IT thay mực định kỳ. Nhân viên chỉ cần báo ticket nếu >1 ngày chưa xử lý."
 Câu trả lời: "IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Bạn không cần tự thay, chỉ cần báo qua ticket nếu máy báo lỗi hơn 1 ngày chưa được xử lý."
 Phân tích: Đầy đủ cả 2 ý: (1) IT thay mực, (2) báo ticket nếu >1 ngày. Không hallucination.
-→ context_precision: 1.0, strict_faithfulness: 1.0, answer_relevance: 1.0
+→ context_precision: 1.0, strict_faithfulness: 1.0
 
 [Ví dụ B — Điểm THẤP vì THIẾU thông tin]
 Ground truth: "Thời gian tối đa ở stage Legal là 15 ngày. Nếu quá hạn, AE báo cáo hàng ngày lên VP of Sales."
 Câu trả lời: "Thời gian tối đa là 15 ngày."
 Phân tích: THIẾU hoàn toàn ý thứ 2 về "AE báo cáo hàng ngày lên VP of Sales". Đây là thông tin quan trọng.
-→ context_precision: 1.0, strict_faithfulness: 1.0, answer_relevance: 0.5
+→ context_precision: 1.0, strict_faithfulness: 1.0
 
 [Ví dụ C — Điểm THẤP vì HALLUCINATION]
 Ground truth: "IT thay mực định kỳ. Nhân viên chỉ cần báo ticket."
 Câu trả lời: "Nhân viên tự thay mực và báo lại cho quản lý."
 Phân tích: Câu trả lời nói "nhân viên tự thay" — HOÀN TOÀN SAI so với ground truth và context. Đây là hallucination nghiêm trọng.
-→ context_precision: 1.0, strict_faithfulness: 0.0, answer_relevance: 0.0
+→ context_precision: 1.0, strict_faithfulness: 0.0
 
 [Ví dụ D — Điểm TRUNG BÌNH]
 Ground truth: "Đổi mật khẩu AD, email, VPN, Jira, GitHub. Kích hoạt MFA. Thông báo Security Team."
 Câu trả lời: "Ngay lập tức đổi mật khẩu AD và tất cả mật khẩu có liên quan. Kích hoạt MFA lại."
 Phân tích: Có ý 1 (đổi mật khẩu) và ý 2 (MFA). THIẾU ý 3: "thông báo Security Team kiểm tra log". Không hallucination.
-→ context_precision: 1.0, strict_faithfulness: 1.0, answer_relevance: 0.67
+→ context_precision: 1.0, strict_faithfulness: 1.0
 
 ═══════════════════════════════════════════════════════════════
 RUBRIC CHI TIẾT:
@@ -90,23 +115,16 @@ strict_faithfulness (float 0.0–1.0):
 - 0.5: Có 1 câu nói sai hoặc thêm thông tin không được context hỗ trợ.
 - 0.0: Có hallucination rõ ràng hoặc trả lời hoàn toàn sai sự thật so với context.
 
-answer_relevance (float 0.0–1.0):
-- 1.0: Chứa TẤT CẢ các điểm then chốt trong ground truth. Không thiếu gì.
-- 0.75: Thiếu 1 chi tiết PHỤ (không ảnh hưởng lớn).
-- 0.5: Thiếu 1 chi tiết QUAN TRỌNG hoặc trả lời chưa đầy đủ.
-- 0.25: Thiếu nhiều chi tiết quan trọng hoặc trả lời lấp lửng.
-- 0.0: Hoàn toàn lạc đề hoặc trả lời "không có thông tin" khi ground truth có đáp án.
-
 ═══════════════════════════════════════════════════════════════
 BẮT BUỘC: Trả về JSON với đầy đủ phân tích reasoning (ít nhất 3 câu).
 
 {{
-  "reasoning": "Phân tích chi tiết: (1) So sánh với ground truth... (2) Thiếu/Hallucination... (3) Lý do chấm điểm...",
+  "reasoning": "Phân tích chi tiết: (1) So sánh với GT... (2) Thiếu/Hallucination... (3) Lý do chấm điểm...",
   "context_precision": <float>,
-  "strict_faithfulness": <float>,
-  "answer_relevance": <float>
+  "strict_faithfulness": <float>
 }}
 """
 
+# Prompt cũ giữ lại cho backward compatibility
 RETRIEVAL_EVAL_PROMPT = """DEPRECATED — dùng COMBINED_EVAL_PROMPT hoặc CONTEXT_RECALL_PROMPT thay thế."""
 GENERATION_EVAL_PROMPT = """DEPRECATED — dùng COMBINED_EVAL_PROMPT thay thế."""

@@ -1,16 +1,10 @@
 """
-resource_profile.py — Centralized Resource-Tier Dispatcher (FINAL)
+resource_profile.py — Centralized Resource-Tier Dispatcher (v5.1)
 
-Design goals:
-- Stable routing (không phụ thuộc LLM runtime)
-- Không làm loãng context khi multi-topic
-- Scale tài nguyên theo độ khó + số topic
-- Tránh over-optimization gây mất recall
-
-Tier mapping:
-  FAST     complexity < 0.30
-  STANDARD complexity < 0.65
-  FULL     complexity ≥ 0.65
+Changes:
+- Increase STANDARD max_output_tokens 450→650 for multi-claim answers
+- Decrease STANDARD per_chunk_min_chars 280→200 to fit more chunks
+- Increase FAST max_output_tokens 280→350 to avoid mid-sentence cutoff
 """
 
 from dataclasses import dataclass
@@ -24,68 +18,51 @@ class ResourceProfile:
     tier: Tier
     complexity: float
 
-    # ── Generator ───────────────────────────────────────
     max_output_tokens: int
     prompt_tier: Tier
 
-    # ── Context Builder ─────────────────────────────────
     max_context_chars: int
     per_chunk_min_chars: int
 
-    # ── Reranker ────────────────────────────────────────
     rerank_top_k: int
-
-    # ── Rewriter ────────────────────────────────────────
     skip_rewrite: bool
 
-
-    # ────────────────────────────────────────────────────
-    # FACTORY
-    # ────────────────────────────────────────────────────
     @classmethod
     def from_complexity(cls, complexity: float, n_topics: int = 1) -> "ResourceProfile":
 
-        # ────────────────────────────────────────────────
-        # FAST — single fact
-        # ────────────────────────────────────────────────
+        # ── FAST: single fact, but allow 2 short claims ──
         if complexity < 0.30:
             return cls(
                 tier="FAST",
                 complexity=complexity,
 
-                max_output_tokens=280,
+                max_output_tokens=350,      # ↑ 280→350: đủ cho 2 ý ngắn
                 prompt_tier="FAST",
 
                 max_context_chars=1_200,
                 per_chunk_min_chars=250,
 
                 rerank_top_k=min(2 * n_topics, 4),
-
                 skip_rewrite=True,
             )
 
-        # ────────────────────────────────────────────────
-        # STANDARD — 1 topic, vài bước
-        # ────────────────────────────────────────────────
+        # ── STANDARD: multi-step, multi-claim answers ──
         elif complexity < 0.65:
             return cls(
                 tier="STANDARD",
                 complexity=complexity,
 
-                max_output_tokens=450,
+                max_output_tokens=650,      # ↑ 450→650: đủ cho 3–4 ý then chốt
                 prompt_tier="STANDARD",
 
                 max_context_chars=2_800,
-                per_chunk_min_chars=280,
+                per_chunk_min_chars=200,    # ↓ 280→200: nhiều chunk hơn, đa dạng hơn
 
                 rerank_top_k=min(3 * n_topics, 6),
-
                 skip_rewrite=False,
             )
 
-        # ────────────────────────────────────────────────
-        # FULL — multi-topic / complex reasoning
-        # ────────────────────────────────────────────────
+        # ── FULL: complex reasoning, multi-topic ──
         else:
             if n_topics == 1:
                 ctx = 5200
@@ -109,9 +86,9 @@ class ResourceProfile:
                 per_chunk_min_chars=300,
 
                 rerank_top_k=rerank_k,
-
                 skip_rewrite=False,
             )
+
     def log_summary(self) -> str:
         return (
             f"[Profile] tier={self.tier} | "

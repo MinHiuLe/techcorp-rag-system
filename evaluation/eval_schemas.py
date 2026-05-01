@@ -15,8 +15,8 @@ class GenerationEvalResult(BaseModel):
     reasoning: str
 
 
-# ── Schema MỚI cho combined evaluator (v5) ────────────────────────────────────
-# strict_faithfulness chuyển từ int → float để có variance
+# ── Schema cho combined evaluator (v5.2) ──────────────────────────────────────
+# CHANGED: Bỏ answer_relevance khỏi combined, chỉ giữ precision + faithfulness
 
 class CombinedEvalResult(BaseModel):
     context_precision:   float = Field(
@@ -26,10 +26,6 @@ class CombinedEvalResult(BaseModel):
     strict_faithfulness: float = Field(
         ge=0.0, le=1.0,
         description="Mức độ trung thực với context (0.0 = hallucination nặng, 1.0 = hoàn toàn grounded)."
-    )
-    answer_relevance:    float = Field(
-        ge=0.0, le=1.0,
-        description="Độ đầy đủ so với ground truth (0.0 = lạc đề, 1.0 = đầy đủ mọi ý)."
     )
     reasoning:           str   = Field(
         description="Phân tích chi tiết: so sánh với GT, liệt kê thiếu/hallucination, lý do chấm điểm."
@@ -45,4 +41,16 @@ class ContextRecallResult(BaseModel):
     )
     reasoning: str = Field(
         description="Liệt kê từng ý trong GT và đánh dấu ✓/✗."
+    )
+
+
+# ── NEW: Schema cho completeness ───────────────────────────────────────────────
+
+class CompletenessResult(BaseModel):
+    completeness: float = Field(
+        ge=0.0, le=1.0,
+        description="Tỷ lệ ý then chốt trong GT được cover bởi câu trả lời."
+    )
+    reasoning: str = Field(
+        description="Liệt kê từng ý ✓/✗."
     )
