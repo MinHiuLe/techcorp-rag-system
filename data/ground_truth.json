@@ -1,7 +1,7 @@
 [
   {
-    "question": "TechCorp sử dụng phần mềm bảo mật nào trên laptop của nhân viên?",
-    "ground_truth": "IT cài đặt phần mềm bảo mật CrowdStrike, BitLocker/FileVault trên laptop."
+    "question": "Nhân viên nghỉ việc nhưng làm mất sạc laptop. Theo chính sách, điều gì sẽ xảy ra?",
+    "ground_truth": "Mất phụ kiện (sạc, dây cáp) khi thu hồi thiết bị sẽ bị khấu trừ vào lương cuối kỳ theo bảng giá nội bộ."
   },
   {
     "question": "Nhân viên có được phép giữ lại laptop sau khi nghỉ việc không?",

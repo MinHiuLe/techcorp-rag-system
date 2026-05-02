@@ -13,7 +13,7 @@ from src.core.generator import Generator
 from src.core.resource_profile import ResourceProfile          # ← MỚI
 from src.retrieval.engine import RetrievalStrategyEngine, RetrievalEngine
 from src.retrieval.reranker import RerankPolicyEngine
-from src.retrieval.cache import SemanticCache
+from src.retrieval.cache import MultiStageCache
 from src.utils.text_utils import clean_text
 
 IS_EVAL_MODE = os.getenv("EVAL_MODE", "false").lower() == "true"
@@ -39,7 +39,10 @@ class ProductionRAG:
         self.generator = Generator(self.groq_client)
 
         self.memory = []
-        self.cache  = SemanticCache(threshold=0.90)
+        self.cache  = MultiStageCache(
+            qdrant_client=self.qdrant_client,
+            sem_threshold=0.90,
+        )
 
         if IS_EVAL_MODE:
             print("[Orchestration] EVAL_MODE=true → Semantic Cache bị tắt hoàn toàn.")
@@ -52,7 +55,7 @@ class ProductionRAG:
         self.memory = []
 
     def clear_cache(self) -> None:
-        self.cache.clear()
+        self.cache.clear() 
 
     def _get_formatted_history(self) -> str:
         if not self.memory:
@@ -129,15 +132,19 @@ CÂU HỎI GỐC: {query}"""
         query       = clean_text(raw_query)
         history_str = self._get_formatted_history()
 
-        # ── Embedding ─────────────────────────────────────────────────────────
-        query_embedding = self.dense_model.encode(query).tolist()
+         # Stage 1 — try embedding cache first (saves ~100ms SentenceTransformer)
+        query_embedding = self.cache.get_embedding(query)
+        if query_embedding is None:
+            query_embedding = self.dense_model.encode(query).tolist()
+            self.cache.store_embedding(query, query_embedding)
+    
 
-        # ── Semantic Cache ────────────────────────────────────────────────────
+        # Trong orchestration_v3.py
         if not IS_EVAL_MODE:
-            cached_answer = self.cache.check(query_embedding)
+            cached_answer = self.cache.check_generation(query_embedding)  # NO context_hash
             if cached_answer:
-                self.memory.append({"user": query, "bot": cached_answer})
-                return cached_answer, "⚡ Semantic Cache Hit"
+                print("  ⚡ [PreRetrievalCache] HIT — skipping retrieval + generation")
+                return cached_answer, "⚡ Pre-Retrieval Cache Hit"
 
         # ── Query Analysis ────────────────────────────────────────────────────
         analysis = self.analyzer.analyze(query, history_str)
@@ -196,7 +203,13 @@ CÂU HỎI GỐC: {query}"""
                         f"(complexity={analysis.complexity_score:.2f} < 0.30)"
                     )
                 else:
-                    search_query = self.rewriter.rewrite(query, analysis, history_str)
+               # Stage 2 — try rewrite cache (saves ~500ms LLM call)
+                    search_query = self.cache.get_rewrite(query)
+                    if search_query is None:
+                        search_query = self.rewriter.rewrite(query, analysis, history_str)
+                        self.cache.store_rewrite(query, search_query)
+                    else:
+                        print(f"  [RewriteCache] HIT → '{search_query[:60]}'")
 
                 raw_docs = self.retriever.search(search_query, strategy, fetch_k)
 
@@ -243,15 +256,18 @@ CÂU HỎI GỐC: {query}"""
                 )
 
         # ── Cache Write ───────────────────────────────────────────────────────
-        if not IS_EVAL_MODE and final_context and analysis.intent != "general":
-            self.cache.add(query, query_embedding, final_answer)
+            if not IS_EVAL_MODE and final_context and analysis.intent != "general":
+                # Pass context so future cache hits are invalidated if docs change
+                self.cache.store_generation(
+                    query, query_embedding, final_answer, final_context
+                )
 
-        # ── Memory ────────────────────────────────────────────────────────────
-        self.memory.append({"user": query, "bot": final_answer})
-        if len(self.memory) > 3:
-            self.memory.pop(0)
+            # ── Memory ────────────────────────────────────────────────────────────
+            self.memory.append({"user": query, "bot": final_answer})
+            if len(self.memory) > 3:
+                self.memory.pop(0)
 
-        return final_answer, final_context
+            return final_answer, final_context
 
     def process(self, raw_query: str) -> str:
         answer, _ = self.process_with_context(raw_query)

@@ -249,13 +249,16 @@ LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
 
             # ═══════════════════════════════════════════════════════
             # PHẦN 3: CLAMP MAX CHO SINGLE-?
+            # Ceiling nâng lên 0.65 để single-? queries thực sự phức tạp
+            # (list queries, multi-aspect, conditional) vẫn vào FULL tier.
+            # Trước: cap 0.55 → luôn STANDARD, bỏ sót khi answer là list.
             # ═══════════════════════════════════════════════════════
-            if query.count("?") == 1 and result.complexity_score > 0.55:
+            if query.count("?") == 1 and result.complexity_score > 0.65:
                 old = result.complexity_score
                 if has_process_context or has_condition:
-                    clamped = min(old, 0.60)
+                    clamped = min(old, 0.75)
                 else:
-                    clamped = 0.55
+                    clamped = 0.65
 
                 print(f"  [Analyzer] Single-? max clamp → {old:.2f} -> {clamped:.2f}")
                 result = QueryAnalysis(
@@ -335,4 +338,4 @@ LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
                 complexity_score=0.3,
                 ambiguity_score=0.5,
                 entities=[],
-            )
+            )   

@@ -19,7 +19,9 @@ GENERATOR_PROMPTS = {
         "Bạn là AI Assistant nội bộ TechCorp. "
         "Chỉ dùng thông tin trong CONTEXT. Không bịa. "
         "Trả lời ngắn gọn, thẳng vào câu hỏi. "
-        "Nếu context có nhiều ý liên quan, liệt kê tất cả.",  # ← thêm: liệt kê tất cả
+        "Nếu context liệt kê NHIỀU MỤC cùng loại (phần mềm, bước, điều kiện) "
+        "— kể cả trong ngoặc đơn phân cách bằng dấu phẩy — "
+        "BẮT BUỘC liệt kê TẤT CẢ, không chỉ mục đầu tiên.",
 
         # user
         "CONTEXT:\n{context}\n\nCÂU HỎI: {query}",
@@ -32,6 +34,11 @@ GENERATOR_PROMPTS = {
         "1. Chỉ dùng thông tin trong CONTEXT — không bịa.\n"
         "2. Đọc KỸ toàn bộ context. Đảm bảo câu trả lời cover TẤT CẢ các ý then chốt liên quan đến câu hỏi.\n"
         "3. Nếu context có 2–3 ý quan trọng, liệt kê rõ ràng từng ý. Không tóm tắt bỏ sót.\n"
+        "3b. LIỆT KÊ ĐẦY ĐỦ: Nếu câu hỏi hỏi 'những gì/nào' và context liệt kê nhiều mục "
+        "cùng loại (phần mềm, công cụ, chính sách, hậu quả) — kể cả các mục trong ngoặc đơn "
+        "phân cách bằng dấu phẩy — BẮT BUỘC nêu TẤT CẢ, không rút gọn còn 1 mục.\n"
+        "3c. KIỂM TRA CHIỀU SO SÁNH SỐ: Trước khi viết 'X cao hơn/thấp hơn Y', xác nhận lại. "
+        "Ví dụ: 2.8 < 3.0 (2.8 NHỎ HƠN 3.0). Không được viết ngược chiều.\n"
         "4. KHÔNG nói 'không có thông tin' nếu context chứa dữ liệu liên quan.\n"
         "5. Bảo toàn cảnh báo ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'.\n"
         "6. Giữ nguyên bảng Markdown nếu câu hỏi liên quan đến bảng.\n"
@@ -51,7 +58,18 @@ GENERATOR_PROMPTS = {
         "2. Xác định TẤT CẢ các ý then chốt trong context liên quan đến câu hỏi.\n"
         "3. Đảm bảo câu trả lời cover TỪNG Ý — không được bỏ sót ý quan trọng nào.\n"
         "4. Nếu nhiều ý, liệt kê rõ ràng (dùng dấu đầu dòng hoặc đánh số).\n"
-        "5. KHÔNG nói 'không có thông tin' khi context rõ ràng có dữ liệu.\n\n"
+        "5. KHÔNG nói 'không có thông tin' khi context rõ ràng có dữ liệu.\n"
+        "5b. LIỆT KÊ ĐẦY ĐỦ: Nếu câu hỏi hỏi về 'phần mềm nào', 'công cụ nào', 'chính sách nào', "
+        "'hậu quả gì' — và context liệt kê NHIỀU MỤC (kể cả các mục trong ngoặc đơn phân cách "
+        "bằng dấu phẩy, ví dụ: 'CrowdStrike, BitLocker/FileVault') — BẮT BUỘC liệt kê TẤT CẢ. "
+        "KHÔNG rút gọn còn 1 mục duy nhất.\n"
+        "5c. KIỂM TRA CHIỀU SO SÁNH SỐ (bắt buộc): Trước khi viết 'X cao hơn/thấp hơn Y', "
+        "xác nhận lại bằng phép trừ. Ví dụ: 2.8 − 3.0 = −0.2 < 0 → 2.8 NHỎ HƠN 3.0. "
+        "KHÔNG được viết '2.8 cao hơn 3.0'. Sai số học = hallucination nghiêm trọng.\n"
+        "5d. HẬU QUẢ TOÀN DIỆN: Liệt kê TẤT CẢ hậu quả/điều kiện được NÊU RÕ TRONG CONTEXT "
+        "và điều kiện CỤ THỂ khớp với tình huống câu hỏi. "
+        "KHÔNG suy luận hay thêm hậu quả nếu context không đề cập hoặc điều kiện kích hoạt không khớp "
+        "(ví dụ: context nói 'điểm < 2.0 hai kỳ' → KHÔNG áp dụng cho tình huống 'điểm 2.5 một kỳ').\n\n"
         "QUY TẮC ĐỌC BẢNG:\n"
         "6. Đọc kỹ từng dòng, từng ô. Header xác định ý nghĩa cột.\n"
         "7. Tìm đúng ROW theo tên giai đoạn/mục, đọc đúng CỘT theo header → trả lời con số chính xác.\n"
@@ -65,7 +83,13 @@ GENERATOR_PROMPTS = {
         "13. Câu đơn: tối đa 5 câu. Câu phức: tối đa 15 câu.\n"
         "14. Không thêm thông tin ngoài CONTEXT. Nói xong → dừng.",
 
-        "CONTEXT:\n{context}\n\nCÂU HỎI: {query}",
+        # User turn: checklist fires at generation time (higher attention weight)
+        "CONTEXT:\n{context}\n\n"
+        "CHECKLIST (thực hiện trước khi viết câu trả lời):\n"
+        "\u2022 Tìm TẤT CẢ phần mềm/công cụ/mục cùng loại trong CONTEXT — kể cả trong ngoặc đơn (A, B)\n"
+        "\u2022 Chỉ nêu hậu quả/điều kiện CÓ TRONG CONTEXT và điều kiện kích hoạt KHỚP với tình huống\n"
+        "\u2022 Kiểm tra số học trước khi so sánh\n\n"
+        "CÂU HỎI: {query}",
     ),
 }
 

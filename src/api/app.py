@@ -53,7 +53,12 @@ def _extract_sources(context: str) -> str | None:
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "model_loaded": rag_engine is not None}
+    cache_stats = rag_engine.cache.stats() if rag_engine else {}
+    return {
+            "status": "healthy",
+            "model_loaded": rag_engine is not None,
+            "cache": cache_stats,
+    }
 
 
 @app.post("/chat", response_model=ChatResponse)

@@ -39,10 +39,10 @@ class ResourceProfile:
                 max_output_tokens=350,      # ↑ 280→350: đủ cho 2 ý ngắn
                 prompt_tier="FAST",
 
-                max_context_chars=1_200,
+                max_context_chars=1_800,
                 per_chunk_min_chars=250,
 
-                rerank_top_k=min(2 * n_topics, 4),
+                rerank_top_k=min(3 * n_topics, 5),
                 skip_rewrite=True,
             )
 
