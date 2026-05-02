@@ -11,6 +11,7 @@ __pycache__/
 .pytest_cache/
 .chroma/
 .qdrant/
+tests/
 
 # Rác của hệ điều hành
 .DS_Store

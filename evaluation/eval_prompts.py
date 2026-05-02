@@ -1,130 +1,179 @@
 # ───────────────────────────────────────────────────────────────────────────────
-# eval_prompts.py — Khắt khe hơn, có few-shot negative, reasoning bắt buộc
+# eval_prompts.py — Unified Judge Prompt (v6)
+#
+# THAY ĐỔI SO VỚI v5:
+#   Trước: 3 LLM calls/sample (recall + combined + completeness) = 60 calls/run
+#   Sau:   1 LLM call/sample  (UNIFIED_EVAL_PROMPT)             = 20 calls/run
+#
+# Lý do gộp được: cả 3 prompt cùng đọc context + answer + ground_truth.
+# Tách ra không giúp attention tốt hơn — chỉ tốn token và rate limit.
 # ───────────────────────────────────────────────────────────────────────────────
 
-# Dùng cho context_recall — thay thế embedding-only bằng LLM sentence coverage
-CONTEXT_RECALL_PROMPT = """Bạn là chuyên gia đánh giá RAG. Nhiệm vụ: kiểm tra xem GROUND TRUTH có được COVER đầy đủ trong CONTEXT không.
 
-Câu hỏi: {question}
-Ground truth (đáp án chuẩn): {ground_truth}
-Context (tài liệu retrieve): {context}
-
-HƯỚNG DẪN:
-1. Tách ground truth thành các ý then chốt (mỗi ý là 1 mệnh đề hoàn chỉnh).
-2. Với mỗi ý, kiểm tra xem context có chứa thông tin tương đương không.
-3. Điểm = (số ý được cover) / (tổng số ý).
-
-VÍ DỤ:
-Ground truth: "Thời gian tối đa ở stage Legal là 15 ngày. Nếu quá hạn, AE báo cáo hàng ngày lên VP of Sales."
-Context: "Stage Legal có thời hạn tối đa 15 ngày. Sau 15 ngày, AE cần báo cáo lên cấp trên."
-→ Ý 1: "15 ngày" ✓ | Ý 2: "AE báo cáo hàng ngày" ✓ | Ý 3: "VP of Sales" ✗ (context chỉ nói "cấp trên")
-→ context_recall = 2/3 ≈ 0.67
-
-Trả về JSON:
-{{
-  "reasoning": "Phân tích từng ý...",
-  "context_recall": <float 0.0-1.0>
-}}
-"""
-
-# NEW: Prompt đơn giản chỉ để đếm ý thiếu (tránh bias 0.50 của 8B)
-COMPLETENESS_PROMPT = """Bạn là trợ lý đếm ý. So sánh GROUND TRUTH với CÂU TRẢ LỜI.
-
-Ground truth: {ground_truth}
-Câu trả lời: {answer}
-
-HƯỚNG DẪN:
-1. Tách ground truth thành các ý then chốt (mỗi ý 1 mệnh đề ngắn).
-2. Kiểm tra xem mỗi ý có xuất hiện trong câu trả lời không.
-3. Đếm số ý CÓ và số ý KHÔNG.
-
-VÍ DỤ:
-Ground truth: "IT thay mực. Nhân viên báo ticket nếu >1 ngày."
-Câu trả lời: "IT thay mực."
-→ Ý 1: "IT thay mực" ✓ | Ý 2: "báo ticket nếu >1 ngày" ✗
-→ completeness = 1/2 = 0.5
-
-Trả về JSON:
-{{
-  "reasoning": "Liệt kê từng ý ✓/✗...",
-  "completeness": <float 0.0-1.0>
-}}
-"""
-
-# Prompt chính — gộp precision + faithfulness (KHÔNG bao gồm relevance nữa)
-COMBINED_EVAL_PROMPT = """Bạn là giám khảo KHẮT KHE đánh giá hệ thống RAG. ĐỪNG cho điểm cao chỉ vì câu trả lời "nghe có vẻ đúng". Nếu thiếu thông tin quan trọng so với ground truth → PHẢI trừ điểm.
+# ── UNIFIED PROMPT (dùng thay thế cho cả 3 prompt cũ) ────────────────────────
+UNIFIED_EVAL_PROMPT = """Bạn là giám khảo KHẮT KHE đánh giá hệ thống RAG. Nhiệm vụ: chấm ĐỒNG THỜI 4 metrics trong 1 lần phân tích.
 
 ═══════════════════════════════════════════════════════════════
 CÂU HỎI: {question}
 
-GROUND TRUTH (chuẩn — chứa TẤT CẢ thông tin cần thiết):
+GROUND TRUTH (đáp án chuẩn — chứa TẤT CẢ thông tin cần thiết):
 {ground_truth}
 
-CONTEXT (tài liệu retrieve):
+CONTEXT (tài liệu retrieve được):
 {context}
 
 CÂU TRẢ LỜI CỦA HỆ THỐNG:
 {generated_answer}
 ═══════════════════════════════════════════════════════════════
 
-TRƯỚC KHI CHẤM ĐIỂM, bắt buộc viết phân tích theo mẫu:
-1. So sánh từng ý then chốt trong ground truth với câu trả lời.
-2. Liệt kê những gì CÂU TRẢ LỜI THIẾU so với ground truth.
-3. Liệt kê những gì CÂU TRẢ LỜI THÊM không có trong context (hallucination).
-4. Dựa trên phân tích trên, chấm điểm.
+BƯỚC 1 — PHÂN TÍCH (bắt buộc trước khi chấm điểm):
+
+A. Tách GROUND TRUTH thành các ý then chốt (đánh số 1, 2, 3...).
+
+B. Với mỗi ý, kiểm tra:
+   [CONTEXT]  Ý này có trong context không? → dùng để tính context_recall
+   [ANSWER]   Ý này có trong câu trả lời không? → dùng để tính completeness
+   Ký hiệu: ✓ = có | ✗ = không | ~ = có một phần
+
+C. Kiểm tra hallucination:
+   Liệt kê những gì câu trả lời NÓI THÊM không có trong context.
 
 ═══════════════════════════════════════════════════════════════
-VÍ DỤ CHẤM ĐIỂM:
+BƯỚC 2 — CHẤM 4 METRICS:
 
-[Ví dụ A — Điểm CAO]
-Ground truth: "IT thay mực định kỳ. Nhân viên chỉ cần báo ticket nếu >1 ngày chưa xử lý."
-Câu trả lời: "IT sẽ thay mực định kỳ hoặc khi nhận cảnh báo từ máy. Bạn không cần tự thay, chỉ cần báo qua ticket nếu máy báo lỗi hơn 1 ngày chưa được xử lý."
-Phân tích: Đầy đủ cả 2 ý: (1) IT thay mực, (2) báo ticket nếu >1 ngày. Không hallucination.
-→ context_precision: 1.0, strict_faithfulness: 1.0
+1. context_recall (float 0.0–1.0):
+   = (số ý GT có trong context) / (tổng số ý GT)
+   → Đo retrieval có lấy đủ thông tin không.
 
-[Ví dụ B — Điểm THẤP vì THIẾU thông tin]
-Ground truth: "Thời gian tối đa ở stage Legal là 15 ngày. Nếu quá hạn, AE báo cáo hàng ngày lên VP of Sales."
-Câu trả lời: "Thời gian tối đa là 15 ngày."
-Phân tích: THIẾU hoàn toàn ý thứ 2 về "AE báo cáo hàng ngày lên VP of Sales". Đây là thông tin quan trọng.
-→ context_precision: 1.0, strict_faithfulness: 1.0
+2. context_precision (float 0.0–1.0):
+   - 1.0: Toàn bộ context hữu ích, không có nhiễu
+   - 0.7: Có 1-2 đoạn không liên quan
+   - 0.5: Nửa context hữu ích
+   - 0.0: Context không chứa thông tin cần thiết
+   → Đo chất lượng retrieval (có lấy đúng không).
 
-[Ví dụ C — Điểm THẤP vì HALLUCINATION]
-Ground truth: "IT thay mực định kỳ. Nhân viên chỉ cần báo ticket."
-Câu trả lời: "Nhân viên tự thay mực và báo lại cho quản lý."
-Phân tích: Câu trả lời nói "nhân viên tự thay" — HOÀN TOÀN SAI so với ground truth và context. Đây là hallucination nghiêm trọng.
-→ context_precision: 1.0, strict_faithfulness: 0.0
+3. strict_faithfulness (float 0.0–1.0):
+   - 1.0: Câu trả lời 100% grounded trong context, không bịa
+   - 0.7: Có 1 chi tiết nhỏ không có trong context nhưng không sai
+   - 0.5: Có 1 câu sai hoặc thêm thông tin không được context hỗ trợ
+   - 0.0: Hallucination rõ ràng hoặc mâu thuẫn với context
+   → Đo generator có bịa đặt không.
 
-[Ví dụ D — Điểm TRUNG BÌNH]
-Ground truth: "Đổi mật khẩu AD, email, VPN, Jira, GitHub. Kích hoạt MFA. Thông báo Security Team."
-Câu trả lời: "Ngay lập tức đổi mật khẩu AD và tất cả mật khẩu có liên quan. Kích hoạt MFA lại."
-Phân tích: Có ý 1 (đổi mật khẩu) và ý 2 (MFA). THIẾU ý 3: "thông báo Security Team kiểm tra log". Không hallucination.
-→ context_precision: 1.0, strict_faithfulness: 1.0
+4. answer_completeness (float 0.0–1.0):
+   = (số ý GT có trong câu trả lời) / (tổng số ý GT)
+   Chú ý: Nếu ý KHÔNG có trong context → không tính (đánh dấu N/A, không trừ điểm completeness).
+   → Đo generator có dùng hết thông tin trong context không.
 
-═══════════════════════════════════════════════════════════════
-RUBRIC CHI TIẾT:
-
-context_precision (float 0.0–1.0):
-- 1.0: Mọi đoạn trong context đều hữu ích, không có nhiễu.
-- 0.7: Có 1 đoạn không liên quan lắm nhưng không gây hại.
-- 0.5: Nửa context hữu ích, nửa không liên quan.
-- 0.0: Context hoàn toàn không chứa thông tin cần thiết.
-
-strict_faithfulness (float 0.0–1.0):
-- 1.0: Không có bất kỳ thông tin nào ngoài context. Hoàn toàn trung thực.
-- 0.7: Có thêm 1 chi tiết nhỏ không có trong context nhưng không sai lệch.
-- 0.5: Có 1 câu nói sai hoặc thêm thông tin không được context hỗ trợ.
-- 0.0: Có hallucination rõ ràng hoặc trả lời hoàn toàn sai sự thật so với context.
+5. issue (string):
+   Chọn 1 trong: "OK" | "GENERATOR_MISSED" | "CONTEXT_MISSING" | "HALLUCINATION"
+   - OK: Tất cả metrics ≥ 0.7
+   - GENERATOR_MISSED: context_recall cao (≥ 0.7) nhưng completeness thấp (< 0.6)
+   - CONTEXT_MISSING: context_recall thấp (< 0.5) → retrieval thiếu thông tin
+   - HALLUCINATION: strict_faithfulness thấp (< 0.5) → bot bịa đặt
 
 ═══════════════════════════════════════════════════════════════
-BẮT BUỘC: Trả về JSON với đầy đủ phân tích reasoning (ít nhất 3 câu).
+VÍ DỤ:
+
+[Ví dụ 1 — Tốt]
+GT: "IT thay mực định kỳ. Nhân viên báo ticket nếu >1 ngày."
+Context: "IT thay mực. Nhân viên cần báo ticket nếu máy báo lỗi >1 ngày."
+Answer: "IT thay mực định kỳ. Bạn chỉ cần báo ticket nếu máy báo lỗi hơn 1 ngày."
+Phân tích:
+  Ý 1 "IT thay mực": [CONTEXT] ✓ | [ANSWER] ✓
+  Ý 2 "báo ticket >1 ngày": [CONTEXT] ✓ | [ANSWER] ✓
+  Hallucination: không có
+→ context_recall: 1.0, context_precision: 1.0, strict_faithfulness: 1.0, answer_completeness: 1.0, issue: OK
+
+[Ví dụ 2 — Generator bỏ sót]
+GT: "Đổi mật khẩu AD, email, VPN, Jira, GitHub. Kích hoạt MFA. Thông báo Security Team."
+Context: "Cần đổi mật khẩu tất cả hệ thống. Kích hoạt MFA. Báo Security Team kiểm tra log."
+Answer: "Đổi mật khẩu AD và email. Kích hoạt MFA lại."
+Phân tích:
+  Ý 1 "đổi mật khẩu": [CONTEXT] ✓ | [ANSWER] ~ (thiếu VPN, Jira, GitHub)
+  Ý 2 "kích hoạt MFA": [CONTEXT] ✓ | [ANSWER] ✓
+  Ý 3 "thông báo Security Team": [CONTEXT] ✓ | [ANSWER] ✗
+  Hallucination: không có
+→ context_recall: 1.0, context_precision: 1.0, strict_faithfulness: 1.0, answer_completeness: 0.5, issue: GENERATOR_MISSED
+
+[Ví dụ 3 — Retrieval thiếu]
+GT: "Nhân viên mới cần tạo AD account trong 24h đầu. Manager phải approve."
+Context: "Nhân viên cần tạo tài khoản sau khi onboard." (không nói 24h, không nói manager)
+Answer: "Bạn cần tạo tài khoản sau khi onboard."
+Phân tích:
+  Ý 1 "24h đầu": [CONTEXT] ✗ | [ANSWER] ✗ (N/A - context thiếu)
+  Ý 2 "manager approve": [CONTEXT] ✗ | [ANSWER] ✗ (N/A - context thiếu)
+  Ý 3 "tạo AD account": [CONTEXT] ~ | [ANSWER] ✓
+→ context_recall: 0.33, context_precision: 0.7, strict_faithfulness: 1.0, answer_completeness: 1.0 (chỉ tính ý có trong context), issue: CONTEXT_MISSING
+
+[Ví dụ 4 — Hallucination]
+GT: "IT thay mực định kỳ. Nhân viên chỉ cần báo ticket."
+Context: "IT thay mực. Nhân viên báo ticket."
+Answer: "Nhân viên tự thay mực và báo lại cho quản lý."
+Phân tích:
+  Ý 1 "IT thay mực": [CONTEXT] ✓ | [ANSWER] ✗ (bị đảo ngược thành "nhân viên tự thay")
+  Hallucination: "nhân viên tự thay mực" — SAI hoàn toàn so với context
+→ context_recall: 1.0, context_precision: 1.0, strict_faithfulness: 0.0, answer_completeness: 0.0, issue: HALLUCINATION
+
+═══════════════════════════════════════════════════════════════
+QUAN TRỌNG: Bạn PHẢI trả lờI CHỈ bằng JSON thuần (raw JSON), không dùng markdown ```json, không thêm giải thích ngoài JSON.
+
+BẮT BUỘC: Trả về JSON hợp lệ với đúng 6 fields sau:
 
 {{
-  "reasoning": "Phân tích chi tiết: (1) So sánh với GT... (2) Thiếu/Hallucination... (3) Lý do chấm điểm...",
+  "reasoning": "Bước 1A: [liệt kê ý GT]. Bước 1B: [✓/✗ từng ý với context và answer]. Bước 1C: [hallucination nếu có]. Bước 2: [lý do chấm điểm từng metric]",
+  "context_recall": <float 0.0-1.0>,
+  "context_precision": <float 0.0-1.0>,
+  "strict_faithfulness": <float 0.0-1.0>,
+  "answer_completeness": <float 0.0-1.0>,
+  "issue": "<OK|GENERATOR_MISSED|CONTEXT_MISSING|HALLUCINATION>"
+}}
+"""
+
+
+# ── Legacy prompts — giữ lại để backward compatibility ───────────────────────
+# Không dùng trong evaluator v6+, nhưng giữ để không break import cũ
+
+CONTEXT_RECALL_PROMPT = """[DEPRECATED - dùng UNIFIED_EVAL_PROMPT thay thế]
+
+Câu hỏi: {question}
+Ground truth (đáp án chuẩn): {ground_truth}
+Context (tài liệu retrieve): {context}
+
+Trả về JSON:
+{{
+  "reasoning": "...",
+  "context_recall": <float 0.0-1.0>
+}}
+"""
+
+COMPLETENESS_PROMPT = """[DEPRECATED - dùng UNIFIED_EVAL_PROMPT thay thế]
+
+Ground truth: {ground_truth}
+Câu trả lời: {answer}
+Context (tài liệu retrieve): {context}
+
+Trả về JSON:
+{{
+  "reasoning": "...",
+  "completeness": <float 0.0-1.0>,
+  "issue": "<GENERATOR_MISSED | CONTEXT_MISSING | OK>"
+}}
+"""
+
+COMBINED_EVAL_PROMPT = """[DEPRECATED - dùng UNIFIED_EVAL_PROMPT thay thế]
+
+CÂU HỎI: {question}
+GROUND TRUTH: {ground_truth}
+CONTEXT: {context}
+CÂU TRẢ LỜI: {generated_answer}
+
+Trả về JSON:
+{{
+  "reasoning": "...",
   "context_precision": <float>,
   "strict_faithfulness": <float>
 }}
 """
 
-# Prompt cũ giữ lại cho backward compatibility
-RETRIEVAL_EVAL_PROMPT = """DEPRECATED — dùng COMBINED_EVAL_PROMPT hoặc CONTEXT_RECALL_PROMPT thay thế."""
-GENERATION_EVAL_PROMPT = """DEPRECATED — dùng COMBINED_EVAL_PROMPT thay thế."""
+RETRIEVAL_EVAL_PROMPT  = "[DEPRECATED]"
+GENERATION_EVAL_PROMPT = "[DEPRECATED]"
