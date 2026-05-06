@@ -50,9 +50,10 @@ EVAL_CONFIG = {
     # Context
     "context_max_chars": 5000,    # Match generator FULL tier (5200c)
     
-    # Rate limiting (Gemma 4: 15 RPM/key, 4 keys → ~60 RPM total)
-    "sleep_min"        : 2.0,     # Giảm vì overnight, không cần chờ nhiều
-    "sleep_max"        : 3.0,     # Randomize để tránh burst
+    # Rate limiting (Cohere trial: 10 RPM → 1 call/6s)
+    # Tăng sleep để đảm bảo không bị 429 Cohere và ổn định Gemini
+    "sleep_min"        : 8.0,     
+    "sleep_max"        : 12.0,    
     
     # Dataset
     "dataset_name"     : "TechCorp_IT_Onboarding_GT",
@@ -237,49 +238,68 @@ def call_unified_judge(
         generated_answer= answer,
     )
 
-    try:
-        response = judge_llm.chat.completions.create(
-            model           = JUDGE_MODEL,
-            messages        = [{"role": "user", "content": prompt}],
-            temperature     = 0.0,
-            response_format = {"type": "json_object"},
-        )
-        raw  = response.choices[0].message.content
-        print(f"  [Judge Raw] {raw[:300]!r}...")
-        data = json.loads(raw)
-        return UnifiedEvalResult(**data)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = judge_llm.chat.completions.create(
+                model           = JUDGE_MODEL,
+                messages        = [{"role": "user", "content": prompt}],
+                temperature     = 0.0,
+                response_format = {"type": "json_object"},
+            )
+            raw  = response.choices[0].message.content
+            print(f"  [Judge Raw] {raw[:300]!r}...")
+            data = json.loads(raw)
+            return UnifiedEvalResult(**data)
 
-    except RuntimeError as e:
-        if _is_quota_error(str(e)):
-            print("🚫 Tất cả Gemini keys bị quota. Dừng judge.")
-            return None
-        print(f"⚠️  Judge RuntimeError: {str(e)[:120]}")
-        return UnifiedEvalResult(
-            context_recall=0.0, context_precision=0.0,
-            strict_faithfulness=0.0, answer_completeness=0.0,
-            issue="OK", reasoning="JUDGE_RUNTIME_ERROR",
-        )
+        except RuntimeError as e:
+            if _is_quota_error(str(e)):
+                print("🚫 Tất cả Gemini keys bị quota. Dừng judge.")
+                return None
+            
+            # Nếu gặp lỗi internal server (500), thử lại với backoff
+            if "500" in str(e) or "internal" in str(e).lower():
+                wait_time = (attempt + 1) * 5
+                print(f"⚠️  Gemini 500 Error. Thử lại sau {wait_time}s...")
+                time.sleep(wait_time)
+                continue
 
-    except json.JSONDecodeError as e:
-        if _is_quota_error(str(e)):
-            return None
-        print(f"⚠️  Judge JSON parse error: {str(e)[:120]}")
-        print(f"     Raw response (first 500 chars): {raw!r}")
-        return UnifiedEvalResult(
-            context_recall=0.0, context_precision=0.0,
-            strict_faithfulness=0.0, answer_completeness=0.0,
-            issue="OK", reasoning=f"JUDGE_JSON_ERROR: raw={raw[:200]!r}",
-        )
+            print(f"⚠️  Judge RuntimeError: {str(e)[:120]}")
+            return UnifiedEvalResult(
+                context_recall=0.0, context_precision=0.0,
+                strict_faithfulness=0.0, answer_completeness=0.0,
+                issue="OK", reasoning="JUDGE_RUNTIME_ERROR",
+            )
 
-    except Exception as e:
-        if _is_quota_error(str(e)):
-            return None
-        print(f"⚠️  Judge parse error: {str(e)[:120]}")
-        return UnifiedEvalResult(
-            context_recall=0.0, context_precision=0.0,
-            strict_faithfulness=0.0, answer_completeness=0.0,
-            issue="OK", reasoning=f"JUDGE_PARSE_ERROR: {str(e)[:80]}",
-        )
+        except json.JSONDecodeError as e:
+            if _is_quota_error(str(e)):
+                return None
+            print(f"⚠️  Judge JSON parse error: {str(e)[:120]}")
+            print(f"     Raw response (first 500 chars): {raw!r}")
+            return UnifiedEvalResult(
+                context_recall=0.0, context_precision=0.0,
+                strict_faithfulness=0.0, answer_completeness=0.0,
+                issue="OK", reasoning=f"JUDGE_JSON_ERROR: raw={raw[:200]!r}",
+            )
+
+        except Exception as e:
+            if _is_quota_error(str(e)):
+                return None
+            
+            # Exponential backoff cho các lỗi khác
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 5
+                print(f"⚠️  Lỗi judge ({str(e)[:50]}). Thử lại sau {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+
+            print(f"⚠️  Judge parse error: {str(e)[:120]}")
+            return UnifiedEvalResult(
+                context_recall=0.0, context_precision=0.0,
+                strict_faithfulness=0.0, answer_completeness=0.0,
+                issue="OK", reasoning=f"JUDGE_PARSE_ERROR: {str(e)[:80]}",
+            )
+    return None
 
 
 # ── RAG Pipeline Runner ────────────────────────────────────────────────────────

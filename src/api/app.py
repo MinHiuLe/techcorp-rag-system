@@ -5,13 +5,36 @@ import re
 import time
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from src.pipelines.orchestration import ProductionRAG
+from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Rate Limiting setup
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
+
+# API Key Auth setup
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    if not settings.API_KEYS:
+        return # Allow all if no keys configured
+    valid_keys = [k.strip() for k in settings.API_KEYS.split(",") if k.strip()]
+    if not valid_keys:
+        return
+    if api_key not in valid_keys:
+        raise HTTPException(
+            status_code=403, 
+            detail="Bạn không có quyền truy cập API này. Vui lòng cung cấp X-API-Key hợp lệ."
+        )
 
 rag_engine: ProductionRAG | None = None
 
@@ -29,11 +52,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TechCorp IT Onboarding RAG API",
     description="API phục vụ tra cứu tài liệu nội bộ với kiến trúc Decision-Driven RAG.",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-@app.get("/keys/status")
+@app.get("/keys/status", dependencies=[Depends(verify_api_key)])
 async def key_status():
     if not rag_engine:
          raise HTTPException(status_code=503, detail="Hệ thống chưa sẵn sàng.")
@@ -69,8 +94,9 @@ async def health_check():
     }
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
     if not rag_engine:
         raise HTTPException(
             status_code=503,
@@ -80,19 +106,20 @@ async def chat_endpoint(request: ChatRequest):
     start_time = time.time()
     try:
         answer, context = rag_engine.process_with_context(
-            request.query, 
-            session_id=request.session_id
+            chat_request.query, 
+            session_id=chat_request.session_id
         )
         source = _extract_sources(context)
         latency = round(time.time() - start_time, 2)
 
-        logger.info(f"[{request.session_id}] {latency}s | source={source}")
+        logger.info(f"[{chat_request.session_id}] {latency}s | source={source}")
 
         return ChatResponse(
             answer=answer,
             source=source,
             latency_seconds=latency,
         )
+
 
     except Exception as e:
         logger.error(f"Lỗi xử lý query: {e}")

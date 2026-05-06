@@ -15,3 +15,5 @@ langsmith
 pydantic-settings
 python-dotenv
 markdown
+redis
+slowapi

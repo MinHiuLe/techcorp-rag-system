@@ -1,10 +1,13 @@
 import json
 import re
+import logging
 from pydantic import ValidationError
 from langsmith import traceable
 from src.schemas import QueryAnalysis
 from src.utils.text_utils import extract_json
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class QueryAnalyzer:
@@ -145,7 +148,7 @@ LƯU Ý: Trả về JSON thuần túy.
             # chứa từ khóa nghiệp vụ TechCorp → bắt buộc technical
             # ═══════════════════════════════════════════════════════
             if result.intent == "general" and self._has_technical_keyword(query):
-                print(f"  [Analyzer] Technical keyword detected → force intent 'technical' (was 'general')")
+                logger.info(f"  [Analyzer] Technical keyword detected → force intent 'technical' (was 'general')")
                 result = QueryAnalysis(
                     intent="technical",
                     complexity_score=result.complexity_score,
@@ -162,9 +165,9 @@ LƯU Ý: Trả về JSON thuần túy.
                 # Câu "Ai/Bộ phận nào...khi..." có điều kiện
                 if " khi " in query_lower and len(query) > 45:
                     forced = 0.35
-                    print(f"  [Analyzer] Fact with 'khi' condition → force {forced} (was {result.complexity_score:.2f})")
+                    logger.info(f"  [Analyzer] Fact with 'khi' condition → force {forced} (was {result.complexity_score:.2f})")
                 else:
-                    print(f"  [Analyzer] Simple fact override → force 0.15 (was {result.complexity_score:.2f})")
+                    logger.info(f"  [Analyzer] Simple fact override → force 0.15 (was {result.complexity_score:.2f})")
 
                 result = QueryAnalysis(
                     intent=result.intent,
@@ -198,7 +201,7 @@ LƯU Ý: Trả về JSON thuần túy.
                     and result.complexity_score > 0.25):
 
                     clamped = 0.20
-                    print(f"  [Analyzer] Single-fact lookup → clamp {result.complexity_score:.2f} → {clamped:.2f}")
+                    logger.info(f"  [Analyzer] Single-fact lookup → clamp {result.complexity_score:.2f} → {clamped:.2f}")
                     result = QueryAnalysis(
                         intent=result.intent,
                         complexity_score=clamped,
@@ -213,7 +216,7 @@ LƯU Ý: Trả về JSON thuần túy.
                       and result.complexity_score > 0.40):
 
                     clamped = 0.35
-                    print(f"  [Analyzer] Single-fact + process context → clamp {result.complexity_score:.2f} → {clamped:.2f}")
+                    logger.info(f"  [Analyzer] Single-fact + process context → clamp {result.complexity_score:.2f} → {clamped:.2f}")
                     result = QueryAnalysis(
                         intent=result.intent,
                         complexity_score=clamped,
@@ -233,7 +236,7 @@ LƯU Ý: Trả về JSON thuần túy.
                 else:
                     clamped = 0.65
 
-                print(f"  [Analyzer] Single-? max clamp → {old:.2f} -> {clamped:.2f}")
+                logger.info(f"  [Analyzer] Single-? max clamp → {old:.2f} -> {clamped:.2f}")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=clamped,
@@ -245,7 +248,7 @@ LƯU Ý: Trả về JSON thuần túy.
             # PHẦN 4: MULTI-? → tối thiểu 0.7
             # ═══════════════════════════════════════════════════════
             if query.count("?") >= 2 and result.complexity_score < 0.7:
-                print(f"  [Analyzer] Multi-? → raise {result.complexity_score:.2f} → 0.70")
+                logger.info(f"  [Analyzer] Multi-? → raise {result.complexity_score:.2f} → 0.70")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=0.70,
@@ -257,7 +260,7 @@ LƯU Ý: Trả về JSON thuần túy.
             # PHẦN 5: KHÔNG DẤU ? → max 0.65
             # ═══════════════════════════════════════════════════════
             if "?" not in query and result.complexity_score > 0.65:
-                print(f"  [Analyzer] No '?' → clamp 0.65")
+                logger.info(f"  [Analyzer] No '?' → clamp 0.65")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=0.65,
@@ -270,7 +273,7 @@ LƯU Ý: Trả về JSON thuần túy.
             # Consolidation of PROCEDURE/CONDITION/IMPACT/PROCESS
             # ═══════════════════════════════════════════════════════
             if (has_procedure or has_condition or has_impact or has_process_context) and result.complexity_score < 0.35:
-                print(f"  [Analyzer] Important concept detected → raise to 0.35")
+                logger.info(f"  [Analyzer] Important concept detected → raise to 0.35")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=0.35,
@@ -283,7 +286,7 @@ LƯU Ý: Trả về JSON thuần túy.
             # nếu câu có điều kiện hoặc ngữ cảnh phức tạp
             # ═══════════════════════════════════════════════════════
             if result.complexity_score < 0.30 and (has_condition or has_process_context):
-                print(f"  [Analyzer] Guard rail: condition/process in FAST → raise to 0.30")
+                logger.info(f"  [Analyzer] Guard rail: condition/process in FAST → raise to 0.30")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=0.30,
@@ -294,10 +297,11 @@ LƯU Ý: Trả về JSON thuần túy.
             return result
 
         except (ValidationError, Exception) as e:
-            print(f"  [Analyzer] Fallback do lỗi: {e}")
+            logger.error(f"  [Analyzer] Fallback do lỗi: {e}")
             return QueryAnalysis(
                 intent="technical",
                 complexity_score=0.3,
                 ambiguity_score=0.5,
                 entities=[],
-            )   
+            )
+   

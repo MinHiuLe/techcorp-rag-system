@@ -188,10 +188,14 @@ class GeminiRotatorClient:
                 return _GeminiResponse(text)
 
             except errors.ClientError as e:
+                err_msg = str(e).upper()
                 # Handle rate limits (429)
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
+                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
                     logger.warning(f"[GeminiRotator] Key #{slot.index} rate-limited (429)")
                     slot.mark_exhausted()
+                elif "LEAKED" in err_msg or "API_KEY_INVALID" in err_msg:
+                    logger.error(f"❌ [GeminiRotator] Key #{slot.index} bị khóa do rò rỉ hoặc vô hiệu! Loại bỏ vĩnh viễn.")
+                    slot.mark_exhausted(cooldown=86400) # Khóa 24h (coi như bỏ)
                 else:
                     logger.error(f"[GeminiRotator] ClientError on Key #{slot.index}: {e}")
                     raise

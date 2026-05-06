@@ -175,7 +175,7 @@ def process_and_upload():
 
         file_data = s3_client.get_object(Bucket=bucket_name, Key=file_key)
         content = clean_text(file_data["Body"].read().decode("utf-8", errors="ignore"))
-        print(f"👉 File: {file_key} | Ký tự gốc từ MinIO (sau clean): {len(content)}")
+        logger.info(f"👉 File: {file_key} | Ký tự gốc từ MinIO (sau clean): {len(content)}")
         doc_meta = extractor.process(file_key=file_key, content=content)
 
         chunks = smart_markdown_chunker(content)

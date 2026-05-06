@@ -1,7 +1,10 @@
 import re
+import logging
 from langsmith import traceable
 from src.schemas import QueryAnalysis
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class QueryRewriter:
@@ -138,12 +141,12 @@ TRẢ VỀ CÂU HỎI TỐI ƯU:"""
         rewritten = self._strip_preamble(raw_output)
 
         if self._is_over_rewritten(query, rewritten):
-            print(f"  [Rewriter] '{query}' → SKIP (over-rewritten, fallback to original)")
+            logger.info(f"  [Rewriter] '{query}' → SKIP (over-rewritten, fallback to original)")
             return query
 
         if self._is_scope_narrowed(query, rewritten):
-            print(f"  [Rewriter] '{query}' → SKIP (scope narrowed, fallback to original)")
+            logger.info(f"  [Rewriter] '{query}' → SKIP (scope narrowed, fallback to original)")
             return query
 
-        print(f"  [Rewriter] '{query}' → '{rewritten}'")
+        logger.info(f"  [Rewriter] '{query}' → '{rewritten}'")
         return rewritten

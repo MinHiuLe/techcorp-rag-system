@@ -9,11 +9,14 @@ Backward-compat: build() vẫn nhận complexity=float nếu profile=None
 """
 
 from __future__ import annotations
+import logging
 from typing import TYPE_CHECKING
 from langsmith import traceable
 
 if TYPE_CHECKING:
     from src.core.resource_profile import ResourceProfile
+
+logger = logging.getLogger(__name__)
 
 
 class ContextBuilder:
@@ -64,7 +67,7 @@ class ContextBuilder:
             snippet = f"[Nguồn: {doc['source']}]\n{text}\n---"
 
             if current_length + len(snippet) > max_context_chars:
-                print(
+                logger.info(
                     f"  [Builder] Budget ({max_context_chars}c) đầy "
                     f"→ dừng tại {len(context_parts)} chunks"
                 )
@@ -74,7 +77,7 @@ class ContextBuilder:
             current_length += len(snippet)
 
         tier = profile.tier if profile else "legacy"
-        print(
+        logger.info(
             f"  [Builder/{tier}] {len(context_parts)}/{len(unique_docs)} chunks "
             f"| {current_length}c | budget≤{max_context_chars}c "
             f"| per_chunk≤{per_chunk_limit}c"

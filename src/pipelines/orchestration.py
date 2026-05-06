@@ -1,4 +1,5 @@
 import os
+import logging
 import cohere
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
@@ -15,8 +16,10 @@ from src.retrieval.engine import RetrievalStrategyEngine, RetrievalEngine
 from src.retrieval.reranker import RerankPolicyEngine
 from src.retrieval.cache import MultiStageCache
 from src.utils.text_utils import clean_text
+from src.utils.redis_memory import RedisMemory
 
 IS_EVAL_MODE = os.getenv("EVAL_MODE", "false").lower() == "true"
+logger = logging.getLogger(__name__)
 
 
 class ProductionRAG:
@@ -31,8 +34,6 @@ class ProductionRAG:
         self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
         # ── Hybrid Strategy ───────────────────────────────────────────────────
-        # Analyzer & Rewriter: [TỐI ƯU] Chuyển từ Gemini sang Groq (Llama 8B)
-        # để đạt tốc độ xử lý nhanh nhất và không lo bị 429 quota.
         self.analyzer  = QueryAnalyzer(self.groq_client)
         self.rewriter  = QueryRewriter(self.groq_client)
         
@@ -46,16 +47,16 @@ class ProductionRAG:
         # Generator: Giữ LLaMA 70B (Groq) để đảm bảo chất lượng câu trả lời
         self.generator = Generator(self.groq_client)
 
-        self.session_memories = {}  # {session_id: [{"user": str, "bot": str}]}
+        self.memory = RedisMemory()
         self.cache  = MultiStageCache(
             qdrant_client=self.qdrant_client,
             sem_threshold=0.90,
         )
 
         if IS_EVAL_MODE:
-            print("[Orchestration] EVAL_MODE=true → Semantic Cache bị tắt hoàn toàn.")
+            logger.info("[Orchestration] EVAL_MODE=true → Semantic Cache bị tắt hoàn toàn.")
         
-        print(f"[Orchestration] UTILITY: {settings.UTILITY_MODEL} (Groq) | GENERATOR: {settings.LLM_MODEL} (Groq)")
+        logger.info(f"[Orchestration] UTILITY: {settings.UTILITY_MODEL} (Groq) | GENERATOR: {settings.LLM_MODEL} (Groq)")
 
         if not IS_EVAL_MODE:
             self.cache.validate_and_clean()
@@ -63,14 +64,13 @@ class ProductionRAG:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def clear_memory(self, session_id: str = "default") -> None:
-        if session_id in self.session_memories:
-            self.session_memories[session_id] = []
+        self.memory.clear(session_id)
 
     def clear_cache(self) -> None:
         self.cache.clear() 
 
     def _get_formatted_history(self, session_id: str) -> str:
-        history = self.session_memories.get(session_id, [])
+        history = self.memory.get_history(session_id)
         if not history:
             return "Không có."
         return "\n".join(
@@ -110,12 +110,12 @@ CÂU HỎI GỐC: {query}"""
             ]
             if len(sub_queries) >= 2:
                 sub_queries = sub_queries[:3]   # cap tại 3 tránh latency spike
-                print(f"  [Decompose] {len(sub_queries)} sub-queries (capped at 3):")
+                logger.info(f"  [Decompose] {len(sub_queries)} sub-queries (capped at 3):")
                 for i, sq in enumerate(sub_queries, 1):
-                    print(f"    {i}. {sq}")
+                    logger.info(f"    {i}. {sq}")
                 return sub_queries
         except Exception as e:
-            print(f"  [Decompose] Lỗi → fallback: {e}")
+            logger.error(f"  [Decompose] Lỗi → fallback: {e}")
 
         return [query]
 
@@ -136,7 +136,7 @@ CÂU HỎI GỐC: {query}"""
         merged.sort(key=lambda d: count_map[d["text"]], reverse=True)
 
         total_in = sum(len(d) for d in docs_per_query)
-        print(f"  [Merge] {total_in} docs → {len(merged)} sau dedup")
+        logger.info(f"  [Merge] {total_in} docs → {len(merged)} sau dedup")
         return merged
 
     # ── Core Pipeline ─────────────────────────────────────────────────────────
@@ -151,10 +151,10 @@ CÂU HỎI GỐC: {query}"""
             analysis = self.analyzer.analyze(query, history_str)
             
             # ── TOKEN AUDIT: log ngay sau analysis để debug dễ hơn ───────────────
-            print(
+            logger.info(
                 f"[TOKEN_AUDIT] complexity={analysis.complexity_score:.2f} "
                 f"| intent={analysis.intent} "
-                f"| history_turns={len(self.session_memories.get(session_id, []))}"
+                f"| history_turns={len(self.memory.get_history(session_id))}"
             )
 
             # ── ResourceProfile: single source of truth ──────────
@@ -167,7 +167,7 @@ CÂU HỎI GỐC: {query}"""
             try:
                 query_embedding = self.cache.get_embedding(query)
             except Exception as e:
-                print(f"  ⚠️ [Cache] Error: {e}")
+                logger.warning(f"  ⚠️ [Cache] Error: {e}")
                 query_embedding = None
 
             if query_embedding is None:
@@ -186,10 +186,10 @@ CÂU HỎI GỐC: {query}"""
                         min_tier=profile.tier
                     )
                     if cached_answer:
-                        print(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier} — skipping retrieval + generation")
+                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier} — skipping retrieval + generation")
                         return cached_answer, "⚡ Pre-Retrieval Cache Hit"
                 except Exception as e:
-                    print(f"  ⚠️ [GenCache] Error: {e}")
+                    logger.warning(f"  ⚠️ [GenCache] Error: {e}")
 
             if analysis.intent == "general":
                 final_answer  = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
@@ -206,7 +206,7 @@ CÂU HỎI GỐC: {query}"""
 
                     MULTI_CHUNK_BUDGET = 25  # Tăng budget cho 12k chars context
                     fetch_k_per_sq     = max(8, MULTI_CHUNK_BUDGET // n_topics)
-                    print(
+                    logger.info(
                         f"  [Multi] n_topics={n_topics} "
                         f"→ fetch_k_per_sq={fetch_k_per_sq} (budget={MULTI_CHUNK_BUDGET})"
                     )
@@ -219,7 +219,7 @@ CÂU HỎI GỐC: {query}"""
                         sq_docs = self.retriever.search_with_vec(
                             sq, dense_vecs[i].tolist(), strategy, fetch_k_per_sq
                         )
-                        print(f"  [SubQuery] '{sq[:55]}' → {len(sq_docs)} docs")
+                        logger.info(f"  [SubQuery] '{sq[:55]}' → {len(sq_docs)} docs")
                         docs_per_sq.append(sq_docs)
 
                     raw_docs = self._merge_docs(docs_per_sq)
@@ -229,7 +229,7 @@ CÂU HỎI GỐC: {query}"""
                     n_topics = 1
                     if profile.skip_rewrite:
                         search_query = query
-                        print(
+                        logger.info(
                             f"  [Rewriter] SKIP — tier={profile.tier} "
                             f"(complexity={analysis.complexity_score:.2f} < 0.30)"
                         )
@@ -247,11 +247,11 @@ CÂU HỎI GỐC: {query}"""
                             except Exception:
                                 pass
                         else:
-                            print(f"  [RewriteCache] HIT → '{search_query[:60]}'")
+                            logger.info(f"  [RewriteCache] HIT → '{search_query[:60]}'")
 
                     raw_docs = self.retriever.search(search_query, strategy, fetch_k)
 
-                print(f"[DEBUG] raw_docs    : {len(raw_docs)} docs | n_topics={n_topics}")
+                logger.debug(f"[DEBUG] raw_docs    : {len(raw_docs)} docs | n_topics={n_topics}")
 
                 # ── Rerank ────────────────────────────────────────────────────────
                 ranked_docs = self.policy.apply_policy(
@@ -260,16 +260,16 @@ CÂU HỎI GỐC: {query}"""
                     top_k_override=profile.rerank_top_k,
                 )
 
-                print(f"[DEBUG] ranked_docs : {len(ranked_docs)} docs after policy")
+                logger.debug(f"[DEBUG] ranked_docs : {len(ranked_docs)} docs after policy")
 
                 if not ranked_docs and raw_docs:
-                    print("[WARN]  Fallback raw_docs[:3]")
+                    logger.warning("[WARN]  Fallback raw_docs[:3]")
                     ranked_docs = raw_docs[:3]
 
                 # ── Build Context (BUG FIX 1) ─────────────────────────────────────
                 final_context = ContextBuilder.build(ranked_docs, profile=profile)
 
-                print(
+                logger.info(
                     f"[TOKEN_AUDIT] ctx_chars={len(final_context)} "
                     f"| ctx_budget={profile.max_context_chars} "
                     f"| tier={profile.tier}"
@@ -302,18 +302,13 @@ CÂU HỎI GỐC: {query}"""
                         pass
 
             # ── Memory ────────────────────────────────────────────────────────────
-            if session_id not in self.session_memories:
-                self.session_memories[session_id] = []
-            
-            self.session_memories[session_id].append({"user": query, "bot": final_answer})
-            if len(self.session_memories[session_id]) > 3:
-                self.session_memories[session_id].pop(0)
+            self.memory.add_message(session_id, query, final_answer)
 
             return final_answer, final_context
 
         except Exception as e:
             err_msg = f"❌ [Lỗi hệ thống]: {str(e)}"
-            print(err_msg)
+            logger.error(err_msg)
             return "Hệ thống hiện đang gặp sự cố kết nối tới cơ sở dữ liệu (Qdrant/MinIO). Vui lòng kiểm tra lại hạ tầng Docker.", ""
 
 

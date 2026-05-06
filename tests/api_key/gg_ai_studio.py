@@ -2,7 +2,7 @@ from google import genai
 import os
 
 # Khởi tạo client
-client = genai.Client(api_key="AIzaSyB7soej7ToYYjDY-cAQFNfgh089v6NHhN4")
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 try:
     # Với SDK mới, bạn gọi trực tiếp từ client.models

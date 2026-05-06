@@ -1,6 +1,7 @@
+import os
 from google import genai
 
-client = genai.Client(api_key="AIzaSyB7soej7ToYYjDY-cAQFNfgh089v6NHhN4")
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 try:
     print(f"{'Model Name':<40} | {'Display Name'}")
