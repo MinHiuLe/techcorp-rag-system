@@ -43,13 +43,22 @@ from config.gemini_rotator import GeminiRotatorClient
 JUDGE_MODEL = "gemma-4-31b-it"   # Gemma 4 31B trên Google AI Studio
 
 EVAL_CONFIG = {
-    "n_clusters"       : 5,
-    "per_cluster"      : 4,
-    "context_max_chars": 3500,  # giảm để tránh 500 error trên Gemma 4    # tăng từ 2500 → match generator budget (5200)
+    # Sampling
+    "n_clusters"       : 10,      # 10 clusters để phủ đều topics
+    "per_cluster"      : 5,       # 5 samples/cluster = 50 total
+    
+    # Context
+    "context_max_chars": 5000,    # Match generator FULL tier (5200c)
+    
+    # Rate limiting (Gemma 4: 15 RPM/key, 4 keys → ~60 RPM total)
+    "sleep_min"        : 2.0,     # Giảm vì overnight, không cần chờ nhiều
+    "sleep_max"        : 3.0,     # Randomize để tránh burst
+    
+    # Dataset
     "dataset_name"     : "TechCorp_IT_Onboarding_GT",
-    "sleep_min"        : 4.0,     # tăng để respect Gemma 15 RPM
-    "sleep_max"        : 6.0,
-    "recall_threshold" : 0.70,    # dùng cho embedding fallback
+    
+    # Embedding fallback
+    "recall_threshold" : 0.70,
 }
 
 print("[System] Đang khởi tạo hệ thống RAG và LLM-Judge...")

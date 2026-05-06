@@ -1,15 +1,10 @@
 """
-gemini_rotator.py — Gemini API Key Rotator (Fixed v2)
+gemini_rotator.py — Gemini API Key Rotator (Migrated to google-genai SDK v2)
 
-Fixes so với v1:
-  BUG 1: _rpm_guard dùng global _last_call → tất cả keys bị hit liên tiếp
-          Fix: per-key last_call_at tracking trong _KeySlot
-  BUG 2: max_attempts = slots*2 → RuntimeError thay vì chờ đúng cách
-          Fix: _get_best_slot() luôn trả về slot, tự tính wait time
-
-Env vars:
-  GOOGLE_API_KEY=key1,key2,key3
-  hoặc GOOGLE_API_KEY_1=..., GOOGLE_API_KEY_2=...
+Updates:
+  - Migrated from deprecated google-generativeai to google-genai SDK.
+  - Each key slot now maintains its own genai.Client instance (thread-safe).
+  - Standardized error handling for the new SDK.
 """
 
 from __future__ import annotations
@@ -20,38 +15,17 @@ import re
 import time
 import logging
 from threading import Lock
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable, GoogleAPIError, InternalServerError
+from google import genai
+from google.genai import types, errors
+from src.utils.text_utils import extract_json
 
 logger = logging.getLogger(__name__)
 
-def _extract_json(text: str) -> str:
-    """Robust JSON extraction from LLM output (handles markdown, extra text)."""
-    if not text:
-        return ""
-    text = text.strip()
-    # Nếu wrapped trong ```json ... ```
-    if text.startswith("```"):
-        # Bỏ dòng đầu ```json
-        lines = text.splitlines()
-        if lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    # Tìm object JSON đầu tiên { ... }
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        return match.group(0)
-    return text
 
-
-
-# Gemma 4 31B free: 15 RPM → 1 call/4s per key. Dùng 5s để có buffer.
-PER_KEY_MIN_INTERVAL = 5.0   # giây tối thiểu giữa 2 calls trên cùng 1 key
-COOLDOWN_SECONDS     = 65.0  # khi bị 429 (60s window + 5s buffer)
+PER_KEY_MIN_INTERVAL = 5.0   # RPM tracking
+COOLDOWN_SECONDS     = 65.0  # Rate limit cooldown
 
 
 # ── Key Slot ──────────────────────────────────────────────────────────────────
@@ -60,9 +34,13 @@ COOLDOWN_SECONDS     = 65.0  # khi bị 429 (60s window + 5s buffer)
 class _KeySlot:
     api_key: str
     index: int
+    client: genai.Client = field(init=False)
     exhausted_until: float = 0.0
-    last_call_at: float    = 0.0   # per-key RPM tracking
+    last_call_at: float    = 0.0
     error_count: int       = 0
+
+    def __post_init__(self):
+        self.client = genai.Client(api_key=self.api_key, http_options={'api_version': 'v1beta'})
 
     @property
     def is_available(self) -> bool:
@@ -70,7 +48,6 @@ class _KeySlot:
 
     @property
     def seconds_until_ready(self) -> float:
-        """Bao nhiêu giây nữa key này có thể dùng được (tính cả RPM interval)."""
         cooldown_wait = max(0.0, self.exhausted_until - time.monotonic())
         rpm_wait      = max(0.0, self.last_call_at + PER_KEY_MIN_INTERVAL - time.monotonic())
         return max(cooldown_wait, rpm_wait)
@@ -109,19 +86,6 @@ class _GeminiResponse:
 # ── Rotator Core ──────────────────────────────────────────────────────────────
 
 class GeminiRotatorClient:
-    """
-    Drop-in replacement cho GroqRotatorClient.
-
-    Usage:
-        judge = GeminiRotatorClient()
-        resp  = judge.chat.completions.create(
-            model           = "gemma-3-31b-it",
-            messages        = [{"role": "user", "content": prompt}],
-            response_format = {"type": "json_object"},
-        )
-        text = resp.choices[0].message.content
-    """
-
     def __init__(
         self,
         api_keys: list[str] | None = None,
@@ -144,8 +108,7 @@ class GeminiRotatorClient:
         self.chat  = _ChatNamespace(self)
 
         logger.info(
-            f"[GeminiRotator] {len(self._slots)} key(s) | "
-            f"interval={PER_KEY_MIN_INTERVAL}s/key | cooldown={COOLDOWN_SECONDS}s"
+            f"[GeminiRotator] {len(self._slots)} key(s) | SDK v2 (google-genai)"
         )
 
     @staticmethod
@@ -161,21 +124,11 @@ class GeminiRotatorClient:
                 numbered.append(k)
         return numbered
 
-    # ── Smart slot selection ──────────────────────────────────────────────────
-
     def _get_best_slot(self) -> _KeySlot:
-        """
-        Luôn trả về slot tốt nhất:
-          - Ưu tiên slot is_ready_now, chọn cái lâu nhất chưa được gọi (fairness)
-          - Nếu không có slot nào ready → chọn cái sẽ ready sớm nhất
-        Không bao giờ raise exception — caller tự xử lý việc chờ.
-        """
         ready = [s for s in self._slots if s.is_ready_now]
         if ready:
             return min(ready, key=lambda s: s.last_call_at)
         return min(self._slots, key=lambda s: s.seconds_until_ready)
-
-    # ── Core call ─────────────────────────────────────────────────────────────
 
     def call_with_rotation(
         self,
@@ -185,18 +138,6 @@ class GeminiRotatorClient:
         temperature: float = 0.0,
         **kwargs,
     ) -> _GeminiResponse:
-        """
-        Gọi Gemini với per-key RPM tracking và smart wait.
-
-        Flow:
-          1. Chọn slot tốt nhất
-          2. Nếu slot cần chờ → sleep đúng thời gian
-          3. Gọi API
-          4. Nếu rate limit → mark slot exhausted, chọn slot khác
-          5. Không bao giờ throw RuntimeError vì hết attempts —
-             chỉ throw khi lỗi không phải rate limit (auth, model not found...)
-        """
-        # Tối đa slots*3 lần thử (mỗi key thử tối đa 3 lần sau cooldown)
         max_retries = len(self._slots) * 3
 
         for attempt in range(max_retries):
@@ -210,104 +151,88 @@ class GeminiRotatorClient:
                 )
                 time.sleep(wait + 0.5)
 
-            genai.configure(api_key=slot.api_key)
-
             try:
-                gen_config: dict = {"temperature": temperature}
-                # Gemma 4 via google.generativeai không hỗ trợ response_mime_type
-                # JSON extraction được xử lý bằng prompt + _extract_json()
-
-                safety_settings = [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                ]
+                # Configuration for google-genai
+                config = types.GenerateContentConfig(
+                    temperature=temperature,
+                    # [TỐI ƯU] Tắt hoàn toàn AFC và lọc an toàn để tăng tốc độ phản hồi
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                    ],
+                )
+                
+                # If JSON object is requested, the new SDK handles it better
+                if response_format and response_format.get("type") == "json_object":
+                    config.response_mime_type = "application/json"
 
                 prompt = self._build_prompt(messages)
-
-                model_obj = genai.GenerativeModel(
-                    model_name        = model,
-                    generation_config = gen_config,
-                    safety_settings   = safety_settings,
+                
+                # [TỐI ƯU] Gọi trực tiếp generate_content với config tối giản
+                response = slot.client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=config
                 )
-                response = model_obj.generate_content(prompt)
+
                 raw_text = response.text or ""
-                text     = _extract_json(raw_text)
+                text     = extract_json(raw_text)
 
                 if not text:
-                    logger.warning(f"[GeminiRotator] Key #{slot.index} returned empty/invalid JSON. Raw: {raw_text[:200]!r}")
-                    # Coi như lỗi parse để retry slot khác
-                    raise json.JSONDecodeError("empty response", raw_text, 0)
+                    logger.warning(f"[GeminiRotator] Key #{slot.index} returned empty/invalid JSON.")
+                    raise ValueError("empty response")
 
                 slot.mark_called()
-                logger.debug(f"[GeminiRotator] Key #{slot.index} OK | {len(text)} chars")
                 return _GeminiResponse(text)
 
-            except ResourceExhausted:
-                logger.warning(
-                    f"[GeminiRotator] Key #{slot.index} ResourceExhausted "
-                    f"(attempt {attempt + 1}/{max_retries})"
-                )
-                slot.mark_exhausted()
-
-            except (ServiceUnavailable, InternalServerError) as e:
-                logger.warning(f"[GeminiRotator] Key #{slot.index} ServerError ({type(e).__name__}): {str(e)[:80]}")
-                slot.mark_exhausted(cooldown=20)
-
-            except GoogleAPIError as e:
-                err = str(e).lower()
-                if any(kw in err for kw in ("quota", "rate", "429", "resource_exhausted")):
+            except errors.ClientError as e:
+                # Handle rate limits (429)
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
+                    logger.warning(f"[GeminiRotator] Key #{slot.index} rate-limited (429)")
                     slot.mark_exhausted()
-                elif "500" in err or "internal error" in err:
-                    logger.warning(f"[GeminiRotator] Key #{slot.index} 500 via GoogleAPIError: {str(e)[:80]}")
-                    slot.mark_exhausted(cooldown=20)
                 else:
-                    raise  # auth error, model not found → jangan retry
+                    logger.error(f"[GeminiRotator] ClientError on Key #{slot.index}: {e}")
+                    raise
+
+            except errors.ServerError as e:
+                logger.warning(f"[GeminiRotator] Key #{slot.index} ServerError: {e}")
+                slot.mark_exhausted(cooldown=20)
 
             except Exception as e:
                 err = str(e).lower()
-                if "500" in err or "internal error" in err:
-                    logger.warning(f"[GeminiRotator] Key #{slot.index} 500 via Exception: {str(e)[:80]}")
+                if "429" in err or "quota" in err or "resource_exhausted" in err:
+                    slot.mark_exhausted()
+                elif "500" in err or "server error" in err or "internal error" in err:
                     slot.mark_exhausted(cooldown=20)
                 else:
+                    logger.error(f"[GeminiRotator] Unexpected error on Key #{slot.index}: {e}")
                     raise
 
-        # Nếu vẫn fail sau max_retries, chờ slot sớm nhất và thử 1 lần cuối
+        # Final attempt fallback
         with self._lock:
             last_slot = self._get_best_slot()
         final_wait = last_slot.seconds_until_ready
         if final_wait > 0:
-            logger.warning(f"[GeminiRotator] Final wait {final_wait:.1f}s for key #{last_slot.index}")
             time.sleep(final_wait + 1.0)
 
-        # Final attempt với try-except để không crash evaluator
         try:
-            genai.configure(api_key=last_slot.api_key)
-            gen_config = {"temperature": temperature}
-            safety_settings = [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            ]
-
-            model_obj = genai.GenerativeModel(
-                model, generation_config=gen_config, safety_settings=safety_settings
+            config = types.GenerateContentConfig(temperature=temperature)
+            resp = last_slot.client.models.generate_content(
+                model=model,
+                contents=self._build_prompt(messages),
+                config=config
             )
-            response  = model_obj.generate_content(self._build_prompt(messages))
-            raw_text  = response.text or ""
-            text      = _extract_json(raw_text)
+            text = extract_json(resp.text or "")
             last_slot.mark_called()
             return _GeminiResponse(text)
         except Exception as e:
-            logger.error(f"[GeminiRotator] Final attempt failed: {str(e)[:120]}")
-            # Trả về JSON default để evaluator không crash
-            return _GeminiResponse('{"reasoning": "JUDGE_500_ERROR", "context_recall": 0.0, "context_precision": 0.0, "strict_faithfulness": 0.0, "answer_completeness": 0.0, "issue": "OK"}')
+            logger.error(f"[GeminiRotator] Final attempt failed: {e}")
+            return _GeminiResponse('{"reasoning": "JUDGE_500_ERROR", "issue": "OK"}')
 
     @staticmethod
     def _build_prompt(messages: list[dict]) -> str:
-        """Convert OpenAI messages → single string cho Gemini."""
         system_parts, user_parts = [], []
         for msg in messages:
             role    = msg.get("role", "user")

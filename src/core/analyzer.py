@@ -1,7 +1,9 @@
 import json
 import re
 from pydantic import ValidationError
+from langsmith import traceable
 from src.schemas import QueryAnalysis
+from src.utils.text_utils import extract_json
 from config.settings import settings
 
 
@@ -89,73 +91,45 @@ class QueryAnalyzer:
         query_lower = query.lower()
         return any(tk in query_lower for tk in self._TECHNICAL_KEYWORDS)
 
+    @traceable(run_type="chain", name="Query_Analysis_v5")
     def analyze(self, query: str, history: str = "") -> QueryAnalysis:
         history_section = (
-            f"LỊCH SỬ HỘI THOẠI GẦN ĐÂY:\n{history}\n"
+            f"LỊCH SỬ:\n{history}\n"
             if history and history != "Không có."
             else ""
         )
 
-        prompt = f"""Phân tích câu hỏi HIỆN TẠI và trả về JSON với 4 trường sau:
+        prompt = f"""Bạn là Senior Analyzer tại TechCorp. Nhiệm vụ: Phân loại câu hỏi để tối ưu RAG.
 
-1. "intent": "technical" hoặc "general".
+1. "intent": 
+   - "general": CHỈ khi chào hỏi/xã giao (hi, cảm ơn, bạn là ai).
+   - "technical": BẮT BUỘC nếu liên quan đến: quy trình IT/HR, phần mềm (Docker, VPN, Jira), thiết bị, lương/thưởng, chính sách công ty.
 
-   RULE CỨNG CHO "general" — CHỈ áp dụng KHI VÀ CHỈ KHI câu là chào hỏi XÃ GIAO THUẦN TÚY:
-   ✅ "general": "hello", "chào bạn", "hi", "bạn là ai?", "cảm ơn nhé", "tạm biệt"
-   ❌ KHÔNG "general" — BẮT BUỘC "technical" với MỌI trường hợp dưới đây:
-      • Câu kể tình huống cá nhân: "mình bị...", "tôi đang gặp...", "máy tôi..."
-      • Câu than phiền / chia sẻ: "công ty đánh giá mình...", "mình lo lắng..."
-      • Câu chứa BẤT KỲ từ nghiệp vụ nào: đánh giá, cải thiện, nghỉ phép, lương,
-        bảo hiểm, Docker, VPN, laptop, hợp đồng, IDP, KPI, onboarding,
-        hạn mức, mực in, điểm, phép năm, thử việc, BHXH, Jira, GitHub,
-        MFA, AD, TechCorp, AnyConnect, Qdrant, ...
-      • Câu hỏi về quy trình / chính sách dù được diễn đạt dạng kể lể.
-   → Nguyên tắc: nếu câu có THỂ liên quan đến tài liệu nội bộ TechCorp, LUÔN dùng "technical".
+2. "complexity_score" (0.0-1.0):
+   - 0.1-0.2: Hỏi 1 sự kiện/con số (Địa chỉ server? Hạn mức in? Ai phụ trách?).
+   - 0.3-0.6: Hỏi quy trình 1 chủ đề, điều kiện "Nếu...thì".
+   - 0.7-1.0: Hỏi nhiều chủ đề cùng lúc, so sánh chính sách, tổng hợp dữ liệu.
 
-2. "complexity_score": float 0.0–1.0.
-   - 0.0–0.25: câu hỏi đơn giản, hỏi về 1 THUỘC TÍNH DUY NHẤT.
-   - 0.3–0.65: câu hỏi vừa, cần 1–2 tài liệu, hỏi về quy trình hoặc vài bước.
-   - 0.65–1.0: câu hỏi phức tạp, cần tổng hợp nhiều tài liệu HOẶC có nhiều câu hỏi con.
+3. "ambiguity_score": Cao nếu thiếu thông tin hoặc dùng "nó/vấn đề đó" mà lịch sử không giải thích được.
 
-   ══ RULE BẮT BUỘC CHO SINGLE-FACT LOOKUP ══
-   - Câu hỏi chứa 1 dấu "?" VÀ hỏi 1 thuộc tính duy nhất
-     → complexity_score ≤ 0.20.
-   - Câu yes/no → complexity_score = 0.15.
+4. "entities": Danh sách các từ khóa kỹ thuật/quy trình quan trọng.
 
-   ✅ Ví dụ ĐÚNG (complexity thấp ≤ 0.20):
-      "Địa chỉ server VPN TechCorp-AnyConnect là gì?"   → 0.15
-      "Link tải Cisco AnyConnect ở đâu?"                → 0.15
-      "Ai chịu trách nhiệm thay mực in?"                → 0.15
-      "Hạn mức in mỗi tháng là bao nhiêu điểm?"         → 0.15
-      "Port mặc định của Qdrant là bao nhiêu?"          → 0.15
+LƯU Ý: Trả về JSON thuần túy.
 
-   ✅ Ví dụ ĐÚNG (complexity cao ≥ 0.8):
-      "Cách cài VPN và Docker trên laptop mới?"         → 0.85
-      "Nghỉ phép và lương tháng 13 tính như thế nào?"  → 0.85
-
-   ══ RULE BỔ SUNG ══
-   - Câu KHÔNG có dấu "?" → complexity_score ≤ 0.65.
-   - Tên sản phẩm dài KHÔNG làm tăng complexity.
-
-3. "ambiguity_score": float 0.0–1.0.
-   Cao khi dùng đại từ ("nó", "cái đó") hoặc thiếu context.
-
-4. "entities": mảng string — các từ khóa kỹ thuật quan trọng.
-   Nếu query dùng đại từ, lấy entity từ lịch sử hội thoại.
-
-LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
-
-{history_section}CÂU HỎI HIỆN TẠI: {query}"""
+{history_section}CÂU HỎI: {query}"""
 
         response = self.llm.chat.completions.create(
-            model=settings.UTILITY_MODEL,
+            model=settings.UTILITY_MODEL, # [TỐI ƯU] Dùng Llama 8B qua Groq cho tốc độ tức thì
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             response_format={"type": "json_object"},
         )
 
         try:
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            json_str = extract_json(raw_content)
+            data = json.loads(json_str)
+            
             result = QueryAnalysis(**data)
             query_lower = query.lower()
 
@@ -251,7 +225,6 @@ LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
             # PHẦN 3: CLAMP MAX CHO SINGLE-?
             # Ceiling nâng lên 0.65 để single-? queries thực sự phức tạp
             # (list queries, multi-aspect, conditional) vẫn vào FULL tier.
-            # Trước: cap 0.55 → luôn STANDARD, bỏ sót khi answer là list.
             # ═══════════════════════════════════════════════════════
             if query.count("?") == 1 and result.complexity_score > 0.65:
                 old = result.complexity_score
@@ -293,10 +266,11 @@ LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
                 )
 
             # ═══════════════════════════════════════════════════════
-            # PHẦN 6: NÂNG TỐI THIỂU CHO PROCEDURE/CONDITION/IMPACT
+            # PHẦN 6: NÂNG TỐI THIỂU CHO CÁC KHÁI NIỆM QUAN TRỌNG
+            # Consolidation of PROCEDURE/CONDITION/IMPACT/PROCESS
             # ═══════════════════════════════════════════════════════
-            if (has_procedure or has_condition or has_impact) and result.complexity_score < 0.35:
-                print(f"  [Analyzer] Procedure/Condition/Impact → raise to 0.35")
+            if (has_procedure or has_condition or has_impact or has_process_context) and result.complexity_score < 0.35:
+                print(f"  [Analyzer] Important concept detected → raise to 0.35")
                 result = QueryAnalysis(
                     intent=result.intent,
                     complexity_score=0.35,
@@ -305,19 +279,7 @@ LƯU Ý CUỐI: Chỉ trả về JSON, không giải thích thêm.
                 )
 
             # ═══════════════════════════════════════════════════════
-            # PHẦN 7: PROCESS CONTEXT → đảm bảo STANDARD tier
-            # ═══════════════════════════════════════════════════════
-            if has_process_context and result.complexity_score < 0.35:
-                print(f"  [Analyzer] Process context → raise to 0.35")
-                result = QueryAnalysis(
-                    intent=result.intent,
-                    complexity_score=0.35,
-                    ambiguity_score=result.ambiguity_score,
-                    entities=result.entities,
-                )
-
-            # ═══════════════════════════════════════════════════════
-            # PHẦN 8: GUARD RAIL — Không cho xuống FAST tier
+            # PHẦN 7: GUARD RAIL — Không cho xuống FAST tier
             # nếu câu có điều kiện hoặc ngữ cảnh phức tạp
             # ═══════════════════════════════════════════════════════
             if result.complexity_score < 0.30 and (has_condition or has_process_context):

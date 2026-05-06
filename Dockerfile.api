@@ -1,18 +1,49 @@
-FROM python:3.12-slim
+# ──────────────────────────────────────────────────────────────────
+# STAGE 1 — Builder
+# Gcc chỉ tồn tại ở đây để compile, KHÔNG đưa vào runtime image
+# ──────────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Cài đặt các thư viện hệ thống cần thiết (để build vài package)
-RUN apt-get update && apt-get install -y gcc build-essential && rm -rf /var/lib/apt/lists/*
+# --no-install-recommends: chỉ tải gcc + libgomp1 (~30 MB)
+# Thay vì build-essential kéo 62 packages (91.8 MB) → tránh OOM kill (exit 137)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tạo venv riêng để copy gọn sang stage runtime
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
 
-# [QUAN TRỌNG] Ép cài PyTorch phiên bản CPU để giảm 4GB dung lượng!
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --upgrade pip --quiet \
+    && pip install \
+        --no-cache-dir \
+        --default-timeout=600 \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.txt
 
-# Cài các thư viện còn lại
-RUN pip install --no-cache-dir -r requirements.txt
 
+# ──────────────────────────────────────────────────────────────────
+# STAGE 2 — Runtime
+# Image cuối cùng: không có gcc, chỉ copy venv đã build sẵn
+# ──────────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# libgomp1 cần cho sentence-transformers lúc chạy (OpenMP)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy toàn bộ venv đã compiled — không compile lại gì cả
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy source code để cuối cùng (layer hay thay đổi → không ảnh hưởng cache pip)
 COPY . .
 
 EXPOSE 8000

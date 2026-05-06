@@ -30,7 +30,7 @@ class ResourceProfile:
     @classmethod
     def from_complexity(cls, complexity: float, n_topics: int = 1) -> "ResourceProfile":
 
-        # ── FAST: single fact, but allow 2 short claims ──
+        # ── FAST: single fact ──
         if complexity < 0.30:
             return cls(
                 tier="FAST",
@@ -42,7 +42,7 @@ class ResourceProfile:
                 max_context_chars=1_800,
                 per_chunk_min_chars=250,
 
-                rerank_top_k=min(3 * n_topics, 5),
+                rerank_top_k=min(2 * n_topics, 4), # Align with GEMINI.md (2-4 chunks range)
                 skip_rewrite=True,
             )
 
@@ -58,22 +58,23 @@ class ResourceProfile:
                 max_context_chars=2_800,
                 per_chunk_min_chars=200,    # ↓ 280→200: nhiều chunk hơn, đa dạng hơn
 
-                rerank_top_k=min(3 * n_topics, 6),
+                rerank_top_k=min(3 * n_topics, 6), # Standard gets more than FAST
                 skip_rewrite=False,
             )
 
         # ── FULL: complex reasoning, multi-topic ──
         else:
             if n_topics == 1:
-                ctx = 5200
+                ctx = 12000
             elif n_topics == 2:
-                ctx = 5200   
+                ctx = 12000   
             else:
-                ctx = min(1500 * n_topics, 5200)
+                ctx = min(4000 * n_topics, 12000)
 
-            max_tokens = min(500 + 150 * n_topics, 900)
+            max_tokens = min(600 + 200 * n_topics, 1200)
 
-            rerank_k = min(3 * n_topics + 1, 7)
+            # FULL scaling: ensured to be > STANDARD
+            rerank_k = min(4 * n_topics, 10)
 
             return cls(
                 tier="FULL",

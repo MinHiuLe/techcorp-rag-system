@@ -207,7 +207,7 @@ class SemanticGenerationCache:
       No L1            → L1 in-memory LRU (5 phút) cho hot queries
 
     Collection: "semantic_cache"  (tách biệt "techcorp_knowledge")
-    Payload: query | answer | context_hash | created_at
+    Payload: query | answer | context_hash | complexity | tier | created_at
     """
 
     COLLECTION  = "semantic_cache"
@@ -287,26 +287,29 @@ class SemanticGenerationCache:
         self,
         query_embedding: list[float],
         context_hash: str | None = None,
+        min_tier: str | None = None,
     ) -> str | None:
         """
         Tìm cached answer gần nhất.
 
-        context_hash (optional):
-          - Cung cấp sau khi đã retrieve → HIT chỉ khi hash khớp.
-            Nếu docs đã update → MISS tự động, trigger fresh generation.
-          - None → pre-retrieval fast path, không check context.
+        min_tier (optional): 
+          - Nếu cung cấp, chỉ trả về hit có tier >= min_tier.
+          - Order: FAST (1) < STANDARD (2) < FULL (3).
         """
-        # ── L1 fast path ──────────────────────────────────────────────────────
-        l1_key = self._l1_key(query_embedding)
-        l1_hit = self._l1.get(l1_key)
-        if l1_hit is not None:
-            self._hits += 1
-            logger.info("  ⚡ [SemGenCache] L1 HIT (in-memory)")
-            return l1_hit
+        tier_map = {"FAST": 1, "STANDARD": 2, "FULL": 3}
+        min_tier_val = tier_map.get(min_tier, 0) if min_tier else 0
+
+        # ── L1 fast path (bỏ qua nếu có yêu cầu min_tier để đảm bảo chính xác) ──
+        if not min_tier:
+            l1_key = self._l1_key(query_embedding)
+            l1_hit = self._l1.get(l1_key)
+            if l1_hit is not None:
+                self._hits += 1
+                logger.info("  ⚡ [SemGenCache] L1 HIT (in-memory)")
+                return l1_hit
 
         # ── Qdrant ANN ────────────────────────────────────────────────────────
         try:
-            logger.info(f"[SemGenCache] Querying Qdrant — collection={self.COLLECTION}, threshold={self.threshold}")
             response = self.db.query_points(
                 collection_name=self.COLLECTION,
                 query=query_embedding,
@@ -314,9 +317,6 @@ class SemanticGenerationCache:
                 with_payload=True,
             )
             results = response.points
-            logger.info(f"[SemGenCache] Qdrant returned {len(results)} results")
-            if results:
-                logger.info(f"[SemGenCache] Top score: {results[0].score:.3f}")
         except Exception as exc:
             logger.warning(f"[SemGenCache] Qdrant query error: {exc}")
             return None
@@ -325,40 +325,44 @@ class SemanticGenerationCache:
 
         for hit in results:
             if hit.score < self.threshold:
-                break                          # sorted by score desc, no need to continue
+                break
 
             payload = hit.payload or {}
+
+            # Tier check: complex query không được dùng FAST cache
+            cached_tier = payload.get("tier", "FAST")
+            if tier_map.get(cached_tier, 1) < min_tier_val:
+                logger.info(
+                    f"[SemGenCache] TIER_MISMATCH (score={hit.score:.3f}): "
+                    f"cached={cached_tier} < required={min_tier} → skipping"
+                )
+                continue
 
             # TTL check
             age = now - payload.get("created_at", 0)
             if age > self.ttl_seconds:
                 self._expired_skips += 1
-                logger.debug(f"[SemGenCache] EXPIRED (score={hit.score:.3f}, age={age/3600:.1f}h)")
                 continue
 
-            # Context-aware check (chỉ khi caller cung cấp context_hash)
+            # Context-aware check
             if context_hash is not None:
                 cached_ctx_hash = payload.get("context_hash")
                 if context_hash and cached_ctx_hash and cached_ctx_hash != context_hash:
                     self._context_mismatches += 1
-                    logger.info(
-                        f"[SemGenCache] CONTEXT_MISMATCH (score={hit.score:.3f}) "
-                        "→ docs changed, forcing fresh retrieval"
-                    )
                     continue
 
             answer = payload.get("answer", "")
             if answer:
                 self._hits += 1
-                self._l1.set(l1_key, answer)   # promote to L1
+                if not min_tier:
+                    self._l1.set(self._l1_key(query_embedding), answer)
                 logger.info(
                     f"  ⚡ [SemGenCache] Qdrant HIT "
-                    f"score={hit.score:.3f} age={age/3600:.1f}h"
+                    f"score={hit.score:.3f} tier={cached_tier}"
                 )
                 return answer
 
         self._misses += 1
-        logger.info(f"[SemGenCache] MISS — no valid answer found (total_misses={self._misses})")
         return None
 
     def add(
@@ -367,37 +371,16 @@ class SemanticGenerationCache:
         query_embedding: list[float],
         answer: str,
         context: str | None = None,
+        complexity: float = 0.0,
+        tier: str = "FAST",
     ) -> None:
-        """Persist answer. Skip nếu là fallback / error answer hoặc đã có entry tương tự."""
+        """Persist answer với metadata về complexity và tier."""
         norm = answer.strip().lower()
         for phrase in NO_CACHE_PHRASES:
             if phrase in norm:
-                logger.debug(f"[SemGenCache] Skip — no-cache phrase detected")
                 return
 
         ctx_hash = self.make_context_hash(context)
-
-        # ── Semantic dedup: kiểm tra xem đã có entry gần giống chưa ──────────
-        try:
-            response = self.db.query_points(
-                collection_name=self.COLLECTION,
-                query=query_embedding,
-                limit=1,
-                with_payload=True,
-            )
-            similar = response.points
-            if similar and similar[0].score >= self.threshold:
-                existing = similar[0].payload or {}
-                existing_answer = existing.get("answer", "")
-                # Nếu answer giống nhau → skip (tránh duplicate)
-                if existing_answer and self._answer_similarity(existing_answer, answer) > 0.85:
-                    logger.debug(
-                        f"[SemGenCache] Skip — semantic duplicate "
-                        f"(score={similar[0].score:.3f})"
-                    )
-                    return
-        except Exception:
-            pass  # Nếu search lỗi, vẫn lưu (không block)
 
         try:
             self.db.upsert(
@@ -410,12 +393,13 @@ class SemanticGenerationCache:
                             "query":        query,
                             "answer":       answer,
                             "context_hash": ctx_hash,
+                            "complexity":   complexity,
+                            "tier":         tier,
                             "created_at":   time.time(),
                         },
                     )
                 ],
             )
-            logger.debug(f"[SemGenCache] Stored '{query[:50]}...'")
         except Exception as exc:
             logger.warning(f"[SemGenCache] Failed to store entry: {exc}")
 
@@ -612,8 +596,9 @@ class MultiStageCache:
         self,
         query_embedding: list[float],
         context_hash: str | None = None,
+        min_tier: str | None = None,
     ) -> str | None:
-        return self.generation.check(query_embedding, context_hash)
+        return self.generation.check(query_embedding, context_hash, min_tier)
 
     def store_generation(
         self,
@@ -621,8 +606,10 @@ class MultiStageCache:
         query_embedding: list[float],
         answer: str,
         context: str | None = None,
+        complexity: float = 0.0,
+        tier: str = "FAST",
     ) -> None:
-        self.generation.add(query, query_embedding, answer, context)
+        self.generation.add(query, query_embedding, answer, context, complexity, tier)
 
     # ── Utility ───────────────────────────────────────────────────────────────
 

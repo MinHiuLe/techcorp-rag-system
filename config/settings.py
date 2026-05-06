@@ -5,6 +5,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     GROQ_API_KEY: str = Field(default=..., env="GROQ_API_KEY")
     COHERE_API_KEY: str = Field(default=..., env="COHERE_API_KEY")
+    GOOGLE_API_KEY: str = Field(default="", env="GOOGLE_API_KEY")
 
     QDRANT_URL: str = Field(default="http://localhost:6333", env="QDRANT_URL")
     MINIO_ENDPOINT: str = Field(default="localhost:9000", env="MINIO_ENDPOINT")

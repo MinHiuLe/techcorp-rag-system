@@ -10,6 +10,7 @@ Backward-compat: build() vẫn nhận complexity=float nếu profile=None
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from langsmith import traceable
 
 if TYPE_CHECKING:
     from src.core.resource_profile import ResourceProfile
@@ -20,6 +21,7 @@ class ContextBuilder:
     # ── Public API ────────────────────────────────────────────────────────────
 
     @staticmethod
+    @traceable(run_type="chain", name="Context_Builder_v3")
     def build(
         documents: list,
         complexity: float = 0.5,      # legacy param — bị override nếu profile có

@@ -1,4 +1,5 @@
 import re
+from langsmith import traceable
 from src.schemas import QueryAnalysis
 from config.settings import settings
 
@@ -95,6 +96,7 @@ class QueryRewriter:
         # Fallback: chỉ strip dấu nháy bao quanh nếu có
         return text.strip('"\'\u201c\u201d\u2018\u2019')
 
+    @traceable(run_type="chain", name="Query_Rewrite_v3")
     def rewrite(self, query: str, analysis: QueryAnalysis, history: str = "") -> str:
         """
         Chỉ rewrite khi thực sự cần:
@@ -110,25 +112,20 @@ class QueryRewriter:
         if not needs_rewrite:
             return query
 
-        prompt = f"""Viết lại CÂU HỎI HIỆN TẠI để tối ưu cho Vector Search trong hệ thống nội bộ TechCorp.
+        prompt = f"""Bạn là Expert Search Engineer tại TechCorp. Nhiệm vụ: Viết lại câu hỏi để tối ưu Vector Search.
 
-NGUYÊN TẮC BẮT BUỘC:
-- GIỮ NGUYÊN mọi thuật ngữ kỹ thuật, tên sản phẩm, tên quy trình đã có trong câu hỏi gốc.
-  VD: "Weighted pipeline", "Docker image tag", "AD account" → KHÔNG được đổi hoặc giải thích.
-- NẾU có đại từ mơ hồ ("nó", "cái đó", "vấn đề này"), đọc LỊCH SỬ để thay bằng danh từ gốc.
-- NẾU query dùng từ thông dụng thay cho thuật ngữ chính xác (VD: "lấy" → "cấp phát"),
-  hãy dùng thuật ngữ kỹ thuật. Entities gợi ý (CHỈ tham khảo): {analysis.entities}
-- TUYỆT ĐỐI KHÔNG thêm entity mới không có trong câu gốc. Entities gợi ý chỉ để hiểu
-  ngữ cảnh — không tự chèn vào câu rewrite.
-- GIỮ NGUYÊN phạm vi câu gốc: nếu câu gốc hỏi chung ("phần mềm nào", "quy trình nào"),
-  KHÔNG được thêm mệnh đề thu hẹp ("để ngăn chặn X", "nhằm mục đích Y").
-- Câu rewrite phải NGẮN HƠN hoặc TƯƠNG ĐƯƠNG độ dài câu gốc, không được dài hơn.
-- CHỈ trả về câu hỏi đã viết lại, KHÔNG thêm bất kỳ lời dẫn, giải thích, hay tiêu đề nào.
+NGUYÊN TẮC:
+1. GIỮ NGUYÊN thuật ngữ (Docker, VPN, Jira, AD account...).
+2. THAY THẾ đại từ ("nó", "vấn đề đó") bằng thực thể gốc từ LỊCH SỬ.
+3. DÙNG từ chuyên môn chính xác (VD: "lấy" -> "cấp phát").
+4. TUYỆT ĐỐI KHÔNG thêm thông tin mới hoặc thu hẹp phạm vi ("để ngăn chặn X").
+5. NGẮN GỌN, súc tích, tập trung vào keywords.
 
-LỊCH SỬ HỘI THOẠI GẦN ĐÂY:
+LỊCH SỬ:
 {history}
 
-CÂU HỎI HIỆN TẠI: {query}"""
+CÂU HỎI GỐC: {query}
+TRẢ VỀ CÂU HỎI TỐI ƯU:"""
 
         response = self.llm.chat.completions.create(
             model=settings.UTILITY_MODEL,

@@ -1,16 +1,22 @@
-# Bỏ qua môi trường ảo
+# Chặn môi trường ảo (Thủ phạm 5.9GB)
 venv/
+.venv/
 env/
-.env
 
-# Bỏ qua data local
+# Chặn Data & Storage (Không cần đưa vào image)
+minio_data/
+qdrant_storage/
 storage/
-*.sqlite3
-*.db
+data/
 
-# Bỏ qua cache của Python và mô hình
-__pycache__/
-*.pyc
-.pytest_cache/
-.huggingface/
+# Chặn file ẩn (Nghi phạm 773MB)
+.git/
 .cache/
+.huggingface/
+__pycache__/
+
+# Chặn file cấu hình & IDE
+.vscode/
+.idea/
+docker-compose.yml
+Dockerfile.*

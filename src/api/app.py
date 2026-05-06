@@ -4,6 +4,7 @@ load_dotenv()
 import re
 import time
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -12,24 +13,31 @@ from src.pipelines.orchestration import ProductionRAG
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="TechCorp IT Onboarding RAG API",
-    description="API phục vụ tra cứu tài liệu nội bộ với kiến trúc Decision-Driven RAG.",
-    version="1.1.0",
-)
-
 rag_engine: ProductionRAG | None = None
 
-@app.get("/keys/status")
-async def key_status():
-    return rag_engine.groq_client.status()
-
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
     global rag_engine
     logger.info("Đang khởi tạo ProductionRAG Engine...")
     rag_engine = ProductionRAG()
     logger.info("Hệ thống RAG đã sẵn sàng nhận request!")
+    yield
+    # Shutdown logic (nếu cần)
+    logger.info("Đang dừng hệ thống...")
+
+app = FastAPI(
+    title="TechCorp IT Onboarding RAG API",
+    description="API phục vụ tra cứu tài liệu nội bộ với kiến trúc Decision-Driven RAG.",
+    version="1.1.0",
+    lifespan=lifespan
+)
+
+@app.get("/keys/status")
+async def key_status():
+    if not rag_engine:
+         raise HTTPException(status_code=503, detail="Hệ thống chưa sẵn sàng.")
+    return rag_engine.groq_client.status()
 
 
 class ChatRequest(BaseModel):
@@ -71,7 +79,10 @@ async def chat_endpoint(request: ChatRequest):
 
     start_time = time.time()
     try:
-        answer, context = rag_engine.process_with_context(request.query)
+        answer, context = rag_engine.process_with_context(
+            request.query, 
+            session_id=request.session_id
+        )
         source = _extract_sources(context)
         latency = round(time.time() - start_time, 2)
 
@@ -88,8 +99,13 @@ async def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=500, detail="Lỗi nội bộ hệ thống RAG.")
 
 
-@app.delete("/chat/memory")
-async def clear_memory_endpoint():
+@app.delete("/chat/memory/{session_id}")
+async def clear_memory_endpoint(session_id: str = "default"):
     if rag_engine:
-        rag_engine.clear_memory()
-    return {"status": "Memory cleared."}
+        rag_engine.clear_memory(session_id)
+    return {"status": f"Memory cleared for session {session_id}."}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)
