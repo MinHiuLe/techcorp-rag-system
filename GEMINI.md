@@ -19,7 +19,7 @@ Every user query must traverse these stages in sequence:
     -   *Sparse:* BM25 via `fastembed`.
 5.  **Adaptive Reranker:** Cohere `rerank-multilingual-v3.0`. Top-k is dynamically adjusted based on complexity (2 to 4 chunks).
 6.  **Context Builder:** Deduplication and strict truncation (12,000 chars). Formats source as `[Nguồn: filename.md]`.
-7.  **Generator:** Groq `LLaMA 3.3-70B`. Strict adherence to context for technical queries. General queries (non-RAG) use a friendly assistant prompt. Must admit if technical info is missing.
+7.  **Generator:** Groq `LLaMA 3.3-70B`. Sử dụng **API đồng bộ (Synchronous)** để đảm bảo độ tin cậy của việc theo dõi Token Usage trên LangSmith. Strict adherence to context for technical queries. General queries (non-RAG) use a friendly assistant prompt. Must admit if technical info is missing.
 
 ### 2. Ingestion & Chunking Logic
 -   **Split Point:** Split on `##` sections only. Keep `###` subsections within their parent chunk to preserve semantic context.
@@ -55,7 +55,7 @@ Every user query must traverse these stages in sequence:
 
 ### 2. Security Guardrails
 -   **Prompt Injection:** Use `_INJECTION_PATTERNS` to detect and block malicious system overrides before the pipeline starts.
--   **Off-topic Guard:** If retrieval returns no relevant context for a technical query, refuse to answer instead of hallucinating.
+-   **Off-topic Guard:** Nếu retrieval không trả về ngữ cảnh **trực tiếp và cụ thể** khớp với tình huống (Direct Match), hệ thống BẮT BUỘC phải từ chối trả lời thay vì suy diễn từ các dữ liệu chung chung.
 -   **PII Scrubbing:** All generator outputs MUST pass through `pii_scrubber.py` to mask sensitive data (emails, phones, IDs) before reaching the user.
 
 ---

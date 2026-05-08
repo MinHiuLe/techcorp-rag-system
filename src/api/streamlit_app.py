@@ -1,6 +1,9 @@
 import streamlit as st
 import requests
 import os
+import json
+import time
+import streamlit.components.v1 as components  # type: ignore
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,34 +14,26 @@ st.set_page_config(
     layout="centered"
 )
 
-# Ưu tiên lấy API_BASE_URL (cho chat + feedback)
-# Nếu không có, thử lấy từ API_URL (cũ) và lọc bỏ phần /chat
 api_url_env = os.getenv("API_URL", "")
 default_base = api_url_env.replace("/chat", "") if api_url_env else "http://api:8000"
 
 API_BASE_URL = os.getenv("API_BASE_URL", default_base)
 CHAT_URL     = f"{API_BASE_URL}/chat"
+CHAT_STREAM_URL = f"{API_BASE_URL}/chat/stream"
 FEEDBACK_URL = f"{API_BASE_URL}/chat/feedback"
-API_KEY      = os.getenv("API_KEY", "") # Cần API Key nếu API yêu cầu
+API_KEY      = os.getenv("API_KEY", "") 
 
-# Timeout config — tăng lên 60s để handle multi-topic queries
 REQUEST_TIMEOUT = 60
 
 # ── Feedback Callback ────────────────────────────────────────────────────────
 def handle_feedback(msg_index: int):
-    # Lấy phản hồi từ state của widget
     feedback_val = st.session_state.get(f"fb_{msg_index}")
     if feedback_val is None:
         return
     
-    # Map: 0 -> Thumbs Down (False), 1 -> Thumbs Up (True)
-    is_positive = (feedback_val == "👍") # st.feedback("thumbs") trả về "👍" hoặc "👎" trong bản mới hoặc 0/1 tùy version. 
-    # Trong Streamlit 1.35.0+, st.feedback("thumbs") trả về 0 (down) hoặc 1 (up) hoặc None.
-    # Kiểm tra kiểu dữ liệu trả về
     is_positive = bool(feedback_val) 
 
     msg = st.session_state.messages[msg_index]
-    # Query là tin nhắn ngay trước đó của user
     query = st.session_state.messages[msg_index-1]["content"] if msg_index > 0 else "Unknown"
     
     payload = {
@@ -88,7 +83,6 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
     else:
         content = f"❌ Không tìm thấy nội dung cho tài liệu: `{file_name}` trong hệ thống."
 
-    # Xử lý tìm và đánh dấu vị trí đoạn text được retrieval
     target_injected = False
     if raw_context:
         retrieved_chunks = []
@@ -102,19 +96,31 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
                     retrieved_chunks.append(chunk)
                     
         if retrieved_chunks:
-            # Chỉ cần trỏ đến chunk đầu tiên tìm thấy
             for chunk in retrieved_chunks:
-                # Lấy dòng dài nhất/đầu tiên trong chunk để tìm (tránh bị lỗi do chunker nối thêm header)
                 lines = [line.strip() for line in chunk.split('\n') if len(line.strip()) > 20]
                 if lines:
                     search_str = lines[0]
                     if search_str in content:
-                        replacement = f'<div id="retrieval-target"></div><mark style="background-color: #fef08a; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85em;">🎯 KẾT QUẢ TRÍCH XUẤT</mark>\n\n{search_str}'
+                        replacement = f"""<div id="retrieval-target" style="padding: 15px; background: rgba(90, 169, 230, 0.05); border-left: 4px solid var(--primary); border-radius: 4px; margin: 10px 0;">
+<mark class="pulse-mark" style="background-color: #fef08a; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; color: #854d0e;">🎯 KẾT QUẢ TRÍCH XUẤT</mark>
+<div style="margin-top: 10px; font-style: italic; color: #475569;">
+{search_str}
+</div>
+</div>"""
                         content = content.replace(search_str, replacement, 1)
                         target_injected = True
                         break
 
-    st.markdown(f"**Đường dẫn:** `{file_path or file_name}`")
+    # Tính toán thông tin file
+    file_size = len(content) if file_path else 0
+    size_str = f"{file_size/1024:.1f} KB" if file_size > 1024 else f"{file_size} bytes"
+    
+    # Header Info Bar
+    cols_meta = st.columns([3, 2, 2])
+    cols_meta[0].caption(f"📍 **Đường dẫn:** `{file_name}`")
+    cols_meta[1].caption(f"📏 **Kích thước:** `{size_str}`")
+    cols_meta[2].caption(f"📄 **Định dạng:** `Markdown`" if file_name.endswith('.md') else f"📄 **Định dạng:** `Text`")
+    
     st.divider()
     
     with st.container(height=500):
@@ -123,14 +129,19 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
         else:
             st.text(content)
             
-    # Nút đóng rõ ràng theo yêu cầu
-    cols = st.columns([8, 2])
-    if cols[1].button("Đóng", use_container_width=True):
+    st.divider()
+    cols_foot = st.columns([6, 2, 2])
+    
+    # Nút Copy sử dụng cơ chế của Streamlit (code block)
+    with cols_foot[0]:
+        if st.button("📋 Sao chép toàn bộ nội dung", use_container_width=True):
+            st.code(content)
+            st.toast("Nội dung đã được chuẩn bị trong khối code bên dưới. Bạn có thể nhấn nút copy của Streamlit!")
+            
+    if cols_foot[2].button("Đóng", use_container_width=True, type="primary"):
         st.rerun()
 
-    # JS để tự động cuộn đến vị trí đánh dấu
     if target_injected:
-        import streamlit.components.v1 as components
         components.html("""
             <script>
             setTimeout(function() {
@@ -143,15 +154,17 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
             </script>
         """, height=0)
 
-
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 :root {
     --bg: #f8fafc;
     --panel: #ffffff;
     --border: rgba(0, 0, 0, 0.05);
     --primary: #5aa9e6;
     --primary-soft: rgba(90, 169, 230, 0.1);
+    --primary-glow: rgba(90, 169, 230, 0.15);
     --text: #1e293b;
     --muted: #64748b;
     --transition-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -172,6 +185,43 @@ html, body, [data-testid="stAppViewContainer"] {
 @keyframes reveal {
     0% { opacity: 0; transform: translateY(12px) scale(0.98); }
     100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+@keyframes thinking-pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes stream-glow {
+    0% { box-shadow: 0 0 0 0 rgba(90, 169, 230, 0.2); }
+    70% { box-shadow: 0 0 0 10px rgba(90, 169, 230, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(90, 169, 230, 0); }
+}
+
+@keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+}
+
+@keyframes pulse-highlight {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(254, 240, 138, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(254, 240, 138, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(254, 240, 138, 0); }
+}
+
+.pulse-mark {
+    display: inline-block;
+    animation: pulse-highlight 2s infinite;
 }
 
 .kb-header {
@@ -248,6 +298,99 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 10px 25px rgba(90, 169, 230, 0.3);
 }
 
+/* ── Streaming Effects ─────────────────────────────────────────── */
+.stream-bubble {
+    position: relative;
+    overflow: hidden;
+}
+
+.stream-bubble::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 20px;
+    animation: stream-glow 2s infinite;
+    pointer-events: none;
+}
+
+.stream-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    background-color: var(--primary);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink-cursor 0.8s step-end infinite;
+    border-radius: 1px;
+}
+
+.thinking-bubble {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+    max-width: 85%;
+    animation: reveal 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.thinking-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--primary);
+    border-radius: 50%;
+    animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.thinking-text {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-left: 4px;
+    font-style: italic;
+}
+
+/* Markdown trong stream */
+.stream-content p { margin: 0 0 0.6em 0; }
+.stream-content p:last-child { margin-bottom: 0; }
+.stream-content code {
+    background: rgba(90, 169, 230, 0.1);
+    color: #2563eb;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+.stream-content pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.6em 0;
+}
+.stream-content pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+}
+.stream-content strong { color: #0f172a; }
+.stream-content ul, .stream-content ol { margin: 0.4em 0; padding-left: 1.2em; }
+.stream-content li { margin: 0.2em 0; }
+.stream-content blockquote {
+    border-left: 3px solid var(--primary);
+    margin: 0.6em 0;
+    padding-left: 12px;
+    color: var(--muted);
+    font-style: italic;
+}
+
 .meta-row {
     display: flex;
     align-items: center;
@@ -257,7 +400,6 @@ html, body, [data-testid="stAppViewContainer"] {
     flex-wrap: wrap;
 }
 
-/* Ẩn HTML chip cũ nếu còn sót */
 .source-chip {
     display: none; 
 }
@@ -268,7 +410,6 @@ html, body, [data-testid="stAppViewContainer"] {
     font-family: monospace;
 }
 
-/* Biến st.button thành tag inline sát nhau */
 div[data-testid="stHorizontalBlock"] {
     gap: 8px !important;
     align-items: center !important;
@@ -311,8 +452,6 @@ div[data-testid="stHorizontalBlock"] button:hover p {
     color: #1e293b !important;
 }
 
-
-
 [data-testid="stChatInput"] {
     border-radius: 18px !important;
     border: 1px solid var(--border) !important;
@@ -339,6 +478,12 @@ div[data-testid="stHorizontalBlock"] button:hover p {
     color: var(--text);
     letter-spacing: -0.02em;
 }
+
+/* Scrollbar đẹp */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -382,9 +527,7 @@ def render_message(role: str, content: str, latency: float = None, source: str =
     </div>
     """, unsafe_allow_html=True)
     
-    # Hiển thị các nút source bên dưới bubble
     if sources:
-        # Dùng CSS stColumn auto-width nên chỉ cần bấy nhiêu cột
         cols = st.columns(len(sources)) 
         for idx, s in enumerate(sources):
             if cols[idx].button(f"📄 {s}", key=f"btn_src_{index}_{idx}", help="Nhấn để xem trước nội dung tài liệu"):
@@ -415,11 +558,8 @@ else:
             index   = i,
         )
 
-        # Feedback widget cho assistant message
         if m["role"] == "assistant":
-            # Tạo unique key cho feedback widget
             fb_key = f"fb_{i}"
-            # Render feedback widget ngay bên dưới bubble
             st.feedback(
                 "thumbs", 
                 key=fb_key, 
@@ -436,55 +576,69 @@ if prompt := st.chat_input("Nhập câu hỏi tại đây..."):
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
 
-    # Hiển thị hint nếu query phức tạp (nhiều "?")
-    is_complex = last_prompt.count("?") >= 2
-    spinner_msg = (
-        "Đang xử lý câu hỏi phức tạp (multi-topic)... có thể mất 15–20s"
-        if is_complex
-        else "Đang truy vấn dữ liệu..."
-    )
+    placeholder = st.empty()
+    
+    # ── Hiệu ứng "Đang suy nghĩ" ─────────────────────────────────────────────
+    thinking_html = """
+    <div class="msg-wrap msg-bot" style="margin-bottom: 5px;">
+        <div class="msg-label">KnowBot</div>
+        <div class="thinking-bubble">
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+            <span class="thinking-text">Đang suy nghĩ...</span>
+        </div>
+    </div>
+    """
+    placeholder.markdown(thinking_html, unsafe_allow_html=True)
+    
+    headers = {"X-API-Key": API_KEY} if API_KEY else {}
+    
+    try:
+        start_time = time.time()
+        res = requests.post(
+            CHAT_URL,
+            json={"query": last_prompt, "session_id": "user_123"},
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
 
-    with st.spinner(spinner_msg):
-        headers = {"X-API-Key": API_KEY} if API_KEY else {}
-        try:
-            res = requests.post(
-                CHAT_URL,
-                json={"query": last_prompt, "session_id": "user_123"},
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-            )
+        if res.status_code == 200:
+            data = res.json()
+            full_answer = data.get("answer", "")
+            source = data.get("source", "")
+            raw_context = data.get("context", "")
+            latency = data.get("latency_seconds", round(time.time() - start_time, 2))
+            
+            # Final render với markdown thật
+            final_html = f"""
+            <div class="msg-wrap msg-bot" style="margin-bottom: 5px; animation: fade-in-up 0.3s ease;">
+                <div class="msg-label">KnowBot</div>
+                <div class="msg-bubble">{full_answer}</div>
+            </div>
+            """
+            placeholder.markdown(final_html, unsafe_allow_html=True)
+            
+            st.session_state.messages.append({
+                "role"   : "assistant",
+                "content": full_answer,
+                "latency": latency,
+                "source" : source,
+                "raw_context": raw_context
+            })
+            st.rerun()
+        else:
+            st.error(f"Lỗi hệ thống (HTTP {res.status_code})")
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"Rất tiếc, đã có lỗi xảy ra (HTTP {res.status_code}).",
+            })
+            st.rerun()
 
-            if res.status_code == 200:
-                data    = res.json()
-                answer  = data.get("answer", "Không có phản hồi.")
-                latency = data.get("latency_seconds")
-                source  = data.get("source")
-                # Giả sử API chưa trả về context trực tiếp, ta có thể cần điều chỉnh API
-                # Hiện tại app.py trả về ChatResponse (answer, source, latency)
-                # Ta cần app.py trả về cả context để lưu feedback chính xác nhất.
-                raw_context = data.get("context", "") # Cần check app.py có trả về ko
-            else:
-                answer  = f"Rất tiếc, đã có lỗi xảy ra (HTTP {res.status_code})."
-                latency = None
-                source  = None
-                raw_context = None
-
-        except requests.exceptions.Timeout:
-            answer  = "⏱ Request timeout — câu hỏi quá phức tạp hoặc server đang bận."
-            latency = None
-            source  = None
-            raw_context = None
-        except Exception as e:
-            answer  = f"Lỗi kết nối: {e}"
-            latency = None
-            source  = None
-            raw_context = None
-
-    st.session_state.messages.append({
-        "role"   : "assistant",
-        "content": answer,
-        "latency": latency,
-        "source" : source,
-        "raw_context": raw_context
-    })
-    st.rerun()
+    except Exception as e:
+        st.error(f"Lỗi kết nối: {e}")
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": f"Lỗi kết nối: {e}",
+        })
+        st.rerun()

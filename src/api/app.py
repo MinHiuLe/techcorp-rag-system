@@ -173,6 +173,39 @@ async def feedback_endpoint(feedback: FeedbackRequest):
         raise HTTPException(status_code=500, detail="Không thể lưu phản hồi.")
 
 
+from fastapi.responses import StreamingResponse
+import json
+
+@app.post("/chat/stream", dependencies=[Depends(verify_api_key)])
+async def chat_stream_endpoint(chat_request: ChatRequest):
+    if not rag_engine:
+        raise HTTPException(status_code=503, detail="Hệ thống chưa sẵn sàng.")
+
+    def stream_generator():
+        # Trích xuất source sau khi có context hoàn chỉnh
+        # Vì context có ngay từ đầu sau khi retrieval xong (trước khi gen bắt đầu)
+        # Chúng ta sẽ gửi context/source ở chunk đầu tiên dưới dạng JSON metadata
+        context_sent = False
+        
+        for chunk, context in rag_engine.process_with_context_stream(
+            chat_request.query, 
+            session_id=chat_request.session_id
+        ):
+            if not context_sent:
+                source = _extract_sources(context)
+                metadata = {
+                    "type": "metadata",
+                    "source": source,
+                    "context": context
+                }
+                yield json.dumps(metadata) + "\n"
+                context_sent = True
+            
+            yield json.dumps({"type": "content", "content": chunk}) + "\n"
+
+    return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+
+
 @app.delete("/chat/memory/{session_id}")
 async def clear_memory_endpoint(session_id: str = "default"):
     if rag_engine:

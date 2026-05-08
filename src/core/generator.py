@@ -39,7 +39,7 @@ GENERATOR_PROMPTS = {
         "phân cách bằng dấu phẩy — BẮT BUỘC nêu TẤT CẢ, không rút gọn còn 1 mục.\n"
         "3c. KIỂM TRA CHIỀU SO SÁNH SỐ: Trước khi viết 'X cao hơn/thấp hơn Y', xác nhận lại. "
         "Ví dụ: 2.8 < 3.0 (2.8 NHỎ HƠN 3.0). Không được viết ngược chiều.\n"
-        "4. KHÔNG nói 'không có thông tin' nếu context chứa dữ liệu liên quan.\n"
+        "4. Nếu ngữ cảnh KHÔNG TRỰC TIẾP trả lời câu hỏi, BẮT BUỘC nói 'Tôi không tìm thấy thông tin cụ thể về [chủ đề]'. Không suy diễn.\n"
         "5. Bảo toàn cảnh báo ⚠️, blockquote (>), điều khoản 'Nghiêm cấm'/'Bắt buộc'.\n"
         "6. Giữ nguyên bảng Markdown nếu câu hỏi liên quan đến bảng.\n"
         "7. Trả lời thẳng, không dẫn nhập.",
@@ -51,14 +51,13 @@ GENERATOR_PROMPTS = {
         # system: complete rule book with coverage enforcement
         "Bạn là AI Assistant nội bộ TechCorp. Nhiệm vụ cung cấp thông tin CHÍNH XÁC TUYỆT ĐỐI.\n\n"
         "QUY TẮC CHỐNG BỊA ĐẶT:\n"
-        "NGHIÊM CẤM bịa đặt thông tin ngoài CONTEXT. Nếu CONTEXT có dữ liệu liên quan, "
-        "BẮT BUỘC dùng đúng dữ liệu đó. Không tự nghĩ ra bước, con số, quy trình.\n\n"
+        "NGHIÊM CẤM bịa đặt thông tin ngoài CONTEXT. Nếu CONTEXT không chứa thông tin TRỰC TIẾP và CỤ THỂ về chủ đề người dùng hỏi (ví dụ: hỏi về 'dự án ERP ngành y tế' nhưng context chỉ có 'kịch bản sales chung'), BẮT BUỘC phải trả lời: 'Tôi không tìm thấy thông tin cụ thể về [Chủ đề] trong tài liệu hiện tại'. KHÔNG suy diễn hoặc ép buộc dùng dữ liệu không liên quan.\n\n"
         "QUY TẮC COVER ĐẦY ĐỦ (QUAN TRỌNG):\n"
         "1. Đọc KỸ toàn bộ context trước khi trả lời.\n"
         "2. Xác định TẤT CẢ các ý then chốt trong context liên quan đến câu hỏi.\n"
         "3. Đảm bảo câu trả lời cover TỪNG Ý — không được bỏ sót ý quan trọng nào.\n"
         "4. Nếu nhiều ý, liệt kê rõ ràng (dùng dấu đầu dòng hoặc đánh số).\n"
-        "5. KHÔNG nói 'không có thông tin' khi context rõ ràng có dữ liệu.\n"
+        "5. CHỈ dùng dữ liệu từ context khi nó THỰC SỰ TRỰC TIẾP giải quyết được câu hỏi.\n"
         "5b. LIỆT KÊ ĐẦY ĐỦ: Nếu câu hỏi hỏi về 'phần mềm nào', 'công cụ nào', 'chính sách nào', "
         "'hậu quả gì' — và context liệt kê NHIỀU MỤC (kể cả các mục trong ngoặc đơn phân cách "
         "bằng dấu phẩy, ví dụ: 'CrowdStrike, BitLocker/FileVault') — BẮT BUỘC liệt kê TẤT CẢ. "
@@ -133,12 +132,70 @@ class Generator:
         run = get_current_run_tree()
         if run and hasattr(response, "usage") and response.usage:
             run.add_metadata({
-                "prompt_tokens":      response.usage.prompt_tokens,
-                "completion_tokens":  response.usage.completion_tokens,
-                "total_tokens":       response.usage.total_tokens,
+                "ls_provider": "groq",
+                "ls_model_name": settings.LLM_MODEL,
+                "ls_prompt_tokens":      response.usage.prompt_tokens,
+                "ls_completion_tokens":  response.usage.completion_tokens,
+                "ls_total_tokens":       response.usage.total_tokens,
                 "complexity":         complexity,
                 "prompt_tier":        prompt_tier,
                 "max_output_tokens":  max_output_tokens,
             })
 
         return response.choices[0].message.content
+
+    @traceable(run_type="llm", name="Groq_Llama3_Stream_Generator")
+    def stream_generate(
+        self,
+        original_query: str,
+        context: str,
+        complexity: float = 0.5,
+        prompt_tier: str = "FULL",
+        max_output_tokens: int = 500,
+    ):
+        system_tmpl, user_tmpl = GENERATOR_PROMPTS[prompt_tier]
+        user_content = user_tmpl.format(context=context, query=original_query)
+
+        response = self.llm.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_tmpl},
+                {"role": "user",   "content": user_content},
+            ],
+            temperature=0.0,
+            max_tokens=max_output_tokens,
+            stream=True,
+        )
+
+        for chunk in response:
+            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+                
+            # Log token usage nếu có (thường nằm ở chunk cuối cùng khi stream kết thúc)
+            usage_data = None
+            if hasattr(chunk, 'usage') and chunk.usage:
+                usage_data = chunk.usage
+            elif hasattr(chunk, 'x_groq') and chunk.x_groq and hasattr(chunk.x_groq, 'usage'):
+                usage_data = chunk.x_groq.usage
+                
+            if usage_data:
+                import logging
+                logging.getLogger(__name__).info(f"[Token Tracker] Tìm thấy usage: {usage_data}")
+                rt = get_current_run_tree()
+                if rt:
+                    # Gán trực tiếp vào outputs (LangSmith thường tìm token trong outputs.usage hoặc metadata)
+                    prompt_tokens = getattr(usage_data, "prompt_tokens", 0)
+                    completion_tokens = getattr(usage_data, "completion_tokens", 0)
+                    total_tokens = getattr(usage_data, "total_tokens", 0)
+                    
+                    # Cập nhật metadata chuẩn của LangSmith
+                    rt.add_metadata({
+                        "ls_provider": "groq",
+                        "ls_model_name": settings.LLM_MODEL,
+                        "ls_prompt_tokens": prompt_tokens,
+                        "ls_completion_tokens": completion_tokens,
+                        "ls_total_tokens": total_tokens,
+                    })
+                    
+                    # Dự phòng: thêm vào tags
+                    rt.add_tags([f"Tokens: {total_tokens}"])
