@@ -199,41 +199,58 @@ Qdrant upsert — collection "techcorp_knowledge"
 ## Project Structure
 
 ```
-knowbot/
+.
+├── config/                          # Configuration files
+│   ├── gemini_rotator.py
+│   ├── groq_rotator.py
+│   ├── logging.yaml
+│   └── settings.py
 │
-├── app.py                      # FastAPI entrypoint — routes, middleware, lifespan
-├── streamlit_app.py            # Chat UI — render messages, feedback widget
-├── settings.py                 # Pydantic Settings — reads from .env
-├── schemas.py                  # Shared Pydantic models
+├── evaluation/                      # Evaluation pipeline
+│   ├── eval_prompts.py
+│   ├── eval_results.json
+│   ├── eval_schemas.py
+│   └── evaluator.py
 │
-├── orchestration.py            # ★ Core RAG pipeline (ProductionRAG)
+├── src/                             # Main source code
+│   ├── api/                         # API & UI layer
+│   │   ├── app.py                   # FastAPI entrypoint
+│   │   └── streamlit_app.py         # Streamlit chat UI
+│   │
+│   ├── core/                        # Core RAG components
+│   │   ├── analyzer.py              # Query analysis (intent, complexity, entities)
+│   │   ├── context_builder.py       # Context assembly & deduplication
+│   │   ├── generator.py             # Answer generation with tiered prompts
+│   │   ├── resource_profile.py      # Resource budget management
+│   │   └── rewriter.py              # Conditional query rewriting
+│   │
+│   ├── pipelines/                   # Data processing pipelines
+│   │   ├── extractor.py             # 2-tier metadata extraction
+│   │   ├── ingestion.py             # MinIO → chunk → embed → Qdrant
+│   │   └── orchestration.py         # ★ Main RAG orchestrator
+│   │
+│   ├── retrieval/                   # Search & ranking
+│   │   ├── cache.py                 # Multi-stage cache (embedding + semantic)
+│   │   ├── engine.py                # Hybrid retrieval (dense + sparse RRF)
+│   │   └── reranker.py              # Cohere adaptive rerank
+│   │
+│   ├── utils/                       # Utilities
+│   │   ├── pii_scrubber.py          # PII detection & scrubbing
+│   │   ├── redis_memory.py          # Session memory & feedback log
+│   │   └── text_utils.py            # Text normalization & JSON extraction
+│   │
+│   └── schemas.py                   # Shared Pydantic models
 │
-├── analyzer.py                 # Query analysis — intent, complexity, entities
-├── rewriter.py                 # Conditional query rewriting with guards
-├── context_builder.py          # Context assembly, dedup, budget-aware truncation
-├── generator.py                # Answer generation with tiered prompts
-├── resource_profile.py         # ResourceProfile — single source of truth for budget
+├── docker-compose.yml               # Production compose
+├── docker-compose.dev.yml           # Development compose (hot reload)
+├── docker-compose.prod.yml          # Production compose (resource limits)
 │
-├── engine.py                   # Hybrid retrieval (dense + sparse RRF)
-├── reranker.py                 # Cohere adaptive rerank policy
-├── cache.py                    # Multi-stage cache (Embedding + Rewrite + Semantic)
+├── Dockerfile.api                   # API service image
+├── Dockerfile.ui                    # UI service image
 │
-├── ingestion.py                # MinIO → chunk → embed → Qdrant
-├── extractor.py                # 2-tier metadata extraction
-│
-├── redis_memory.py             # Session memory and feedback log
-├── pii_scrubber.py             # Regex scrub phone, email, ID in output
-├── text_utils.py               # Unicode normalization, JSON extraction
-│
-├── evaluator.py                # Eval pipeline — LangSmith + Gemma judge
-├── eval_prompts.py             # Unified judge prompt (1 call/sample)
-├── eval_schemas.py             # Pydantic schemas for evaluator output
-├── eval_results.json           # Sample eval results
-│
-├── docker-compose.yml          # Production compose
-├── docker-compose.dev.yml      # Dev compose (volume mount, hot reload)
-├── docker-compose.prod.yml     # Prod compose (resource limits)
-└── requirements.txt
+├── GEMINI.md                        # Gemini model documentation
+├── README.md                        # Project documentation
+└── requirements.txt                 # Python dependencies
 ```
 
 ---
