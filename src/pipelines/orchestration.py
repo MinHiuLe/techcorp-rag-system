@@ -46,7 +46,7 @@ class ProductionRAG:
         self.groq_client   = Groq(api_key=settings.GROQ_API_KEY)
         
         self.cohere_client = cohere.Client(api_key=settings.COHERE_API_KEY)
-        self.qdrant_client = QdrantClient(url=settings.QDRANT_URL, timeout=60)
+        self.qdrant_client = QdrantClient(url=settings.QDRANT_URL, timeout=5)
 
         self.dense_model  = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
         self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
@@ -80,6 +80,31 @@ class ProductionRAG:
             self.cache.validate_and_clean()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def health_check(self) -> dict:
+        """Aggregated health status for all dependencies."""
+        qdrant_healthy = False
+        qdrant_msg = "Unknown"
+        try:
+            self.qdrant_client.get_collection(settings.COLLECTION_NAME)
+            qdrant_healthy = True
+            qdrant_msg = "Connected"
+        except Exception as e:
+            qdrant_msg = str(e)
+
+        groq_status = self.groq_client.status()
+        redis_status = self.memory.status()
+        
+        overall = qdrant_healthy and groq_status["healthy"] and redis_status["healthy"]
+
+        return {
+            "status": "healthy" if overall else "degraded",
+            "components": {
+                "qdrant": {"healthy": qdrant_healthy, "message": qdrant_msg},
+                "groq": groq_status,
+                "redis": redis_status,
+            }
+        }
 
     def _is_injection(self, query: str) -> bool:
         return any(pattern.search(query) for pattern in self._INJECTION_PATTERNS)
@@ -170,16 +195,31 @@ CÂU HỎI GỐC: {query}"""
                 logger.warning("[Guardrail] Injection attempt blocked | session=%s", session_id)
                 return self._INJECTION_RESPONSE
 
-            history_str = self._get_formatted_history(session_id)
+            # --- REDIS GRACEFUL DEGRADATION ---
+            try:
+                history_str = self._get_formatted_history(session_id)
+                history_len = len(self.memory.get_history(session_id))
+            except Exception as e:
+                logger.error(f"[REDIS_ERROR] Session={session_id} | {e}")
+                history_str = "Không có (Lỗi kết nối Redis)."
+                history_len = 0
 
             # ── Query Analysis & Resource Profiling ───────────────
-            analysis = self.analyzer.analyze(query, history_str)
+            try:
+                analysis = self.analyzer.analyze(query, history_str)
+            except Exception as e:
+                logger.error(f"[GROQ_ERROR] Analysis failed: {e}")
+                return (
+                    "Hệ thống hiện đang quá tải hoặc gặp sự cố kết nối với AI Model (Groq). "
+                    "Vui lòng thử lại sau vài giây.", 
+                    ""
+                )
             
-            # ── TOKEN AUDIT: log ngay sau analysis để debug dễ hơn ───────────────
+            # ── TOKEN AUDIT ──────────────────────────────────────
             logger.info(
                 f"[TOKEN_AUDIT] complexity={analysis.complexity_score:.2f} "
                 f"| intent={analysis.intent} "
-                f"| history_turns={len(self.memory.get_history(session_id))}"
+                f"| history_turns={history_len}"
             )
 
             # ── ResourceProfile: single source of truth ──────────
@@ -188,11 +228,11 @@ CÂU HỎI GỐC: {query}"""
                 n_topics=3 if self._is_multi_topic(query, analysis) else 1
             )
 
-            # Stage 1 — try embedding cache first (saves ~100ms SentenceTransformer)
+            # Stage 1 — try embedding cache
             try:
                 query_embedding = self.cache.get_embedding(query)
             except Exception as e:
-                logger.warning(f"  ⚠️ [Cache] Error: {e}")
+                logger.warning(f"  ⚠️ [Cache_ERROR] Embedding: {e}")
                 query_embedding = None
 
             if query_embedding is None:
@@ -202,19 +242,18 @@ CÂU HỎI GỐC: {query}"""
                 except Exception:
                     pass
 
-            # Stage 2 — try generation cache (context-aware if context known, else pre-retrieval)
+            # Stage 2 — try generation cache
             if not IS_EVAL_MODE:
                 try:
-                    # Pass profile.tier to ensure we don't hit a lower-tier cache
                     cached_answer = self.cache.check_generation(
                         query_embedding, 
                         min_tier=profile.tier
                     )
                     if cached_answer:
-                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier} — skipping retrieval + generation")
+                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
                         return cached_answer, "⚡ Pre-Retrieval Cache Hit"
                 except Exception as e:
-                    logger.warning(f"  ⚠️ [GenCache] Error: {e}")
+                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
 
             if analysis.intent == "general":
                 final_answer  = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
@@ -226,120 +265,126 @@ CÂU HỎI GỐC: {query}"""
 
                 # ── MULTI-TOPIC PATH ──────────────────────────────────────────────
                 if is_multi:
-                    sub_queries = self._decompose_query(query)
-                    n_topics    = len(sub_queries)
+                    try:
+                        sub_queries = self._decompose_query(query)
+                        n_topics    = len(sub_queries)
 
-                    MULTI_CHUNK_BUDGET = 25  # Tăng budget cho 12k chars context
-                    fetch_k_per_sq     = max(8, MULTI_CHUNK_BUDGET // n_topics)
-                    logger.info(
-                        f"  [Multi] n_topics={n_topics} "
-                        f"→ fetch_k_per_sq={fetch_k_per_sq} (budget={MULTI_CHUNK_BUDGET})"
-                    )
+                        MULTI_CHUNK_BUDGET = 25
+                        fetch_k_per_sq     = max(8, MULTI_CHUNK_BUDGET // n_topics)
 
-                    # Batch encode: 1 lần cho N sub-queries (tránh N lần encode riêng)
-                    dense_vecs = self.dense_model.encode(sub_queries)   # (N, 1024)
+                        dense_vecs = self.dense_model.encode(sub_queries)
 
-                    docs_per_sq = []
-                    for i, sq in enumerate(sub_queries):
-                        sq_docs = self.retriever.search_with_vec(
-                            sq, dense_vecs[i].tolist(), strategy, fetch_k_per_sq
+                        docs_per_sq = []
+                        for i, sq in enumerate(sub_queries):
+                            sq_docs = self.retriever.search_with_vec(
+                                sq, dense_vecs[i].tolist(), strategy, fetch_k_per_sq
+                            )
+                            docs_per_sq.append(sq_docs)
+
+                        raw_docs = self._merge_docs(docs_per_sq)
+                    except Exception as e:
+                        logger.error(f"[QDRANT_ERROR] Multi-topic search failed: {e}")
+                        return (
+                            "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. "
+                            "Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
+                            ""
                         )
-                        logger.info(f"  [SubQuery] '{sq[:55]}' → {len(sq_docs)} docs")
-                        docs_per_sq.append(sq_docs)
-
-                    raw_docs = self._merge_docs(docs_per_sq)
 
                 # ── SINGLE-TOPIC PATH ─────────────────────────────────────────────
                 else:
                     n_topics = 1
                     if profile.skip_rewrite:
                         search_query = query
-                        logger.info(
-                            f"  [Rewriter] SKIP — tier={profile.tier} "
-                            f"(complexity={analysis.complexity_score:.2f} < 0.30)"
-                        )
                     else:
-                   # Stage 2 — try rewrite cache (saves ~500ms LLM call)
                         try:
                             search_query = self.cache.get_rewrite(query)
                         except Exception:
                             search_query = None
 
                         if search_query is None:
-                            search_query = self.rewriter.rewrite(query, analysis, history_str)
                             try:
+                                search_query = self.rewriter.rewrite(query, analysis, history_str)
                                 self.cache.store_rewrite(query, search_query)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.error(f"[GROQ_ERROR] Rewrite failed: {e}")
+                                search_query = query # Fallback to original
                         else:
                             logger.info(f"  [RewriteCache] HIT → '{search_query[:60]}'")
 
-                    raw_docs = self.retriever.search(search_query, strategy, fetch_k)
-
-                logger.debug(f"[DEBUG] raw_docs    : {len(raw_docs)} docs | n_topics={n_topics}")
+                    try:
+                        raw_docs = self.retriever.search(search_query, strategy, fetch_k)
+                    except Exception as e:
+                        logger.error(f"[QDRANT_ERROR] Search failed: {e}")
+                        return (
+                            "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. "
+                            "Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
+                            ""
+                        )
 
                 # ── Rerank ────────────────────────────────────────────────────────
-                ranked_docs = self.policy.apply_policy(
-                    query, raw_docs, analysis,
-                    n_topics=n_topics,
-                    top_k_override=profile.rerank_top_k,
-                )
-
-                logger.debug(f"[DEBUG] ranked_docs : {len(ranked_docs)} docs after policy")
+                try:
+                    ranked_docs = self.policy.apply_policy(
+                        query, raw_docs, analysis,
+                        n_topics=n_topics,
+                        top_k_override=profile.rerank_top_k,
+                    )
+                except Exception as e:
+                    logger.error(f"[COHERE_ERROR] Rerank failed: {e}")
+                    ranked_docs = raw_docs[:3] # Fallback to raw
 
                 if not ranked_docs and raw_docs:
-                    logger.warning("[WARN]  Fallback raw_docs[:3]")
                     ranked_docs = raw_docs[:3]
 
-                # ── Build Context (BUG FIX 1) ─────────────────────────────────────
+                # ── Build Context ────────────────────────────────────────────────
                 final_context = ContextBuilder.build(ranked_docs, profile=profile)
 
-                logger.info(
-                    f"[TOKEN_AUDIT] ctx_chars={len(final_context)} "
-                    f"| ctx_budget={profile.max_context_chars} "
-                    f"| tier={profile.tier}"
-                )
-
-                # ── Generate (BUG FIX 2) ──────────────────────────────────────────
+                # ── Generate ─────────────────────────────────────────────────────
                 if not final_context:
-                    logger.info("[Guardrail] Off-topic blocked | session=%s | query=%s",
-                                session_id, query[:60])
+                    logger.info("[Guardrail] Off-topic blocked | session=%s", session_id)
                     final_answer = (
                         "Xin lỗi, câu hỏi này nằm ngoài phạm vi tài liệu nội bộ TechCorp. "
                         "Tôi chỉ có thể hỗ trợ các vấn đề về IT, HR và Sales."
                     )
                 else:
-                    final_answer = self.generator.generate(
-                        original_query    = query,
-                        context           = final_context,
-                        complexity        = profile.complexity,
-                        prompt_tier       = profile.prompt_tier,
-                        max_output_tokens = profile.max_output_tokens,
-                    )
-
-            # ── Cache Write ───────────────────────────────────────────────────────
-                if not IS_EVAL_MODE and final_answer and analysis.intent != "general":
                     try:
-                        self.cache.store_generation(
-                            query           = query, 
-                            query_embedding = query_embedding, 
-                            answer          = final_answer, 
-                            context         = final_context,
-                            complexity      = profile.complexity,
-                            tier            = profile.tier
+                        final_answer = self.generator.generate(
+                            original_query    = query,
+                            context           = final_context,
+                            complexity        = profile.complexity,
+                            prompt_tier       = profile.prompt_tier,
+                            max_output_tokens = profile.max_output_tokens,
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"[GROQ_ERROR] Generation failed: {e}")
+                        return (
+                            "Hệ thống hiện đang gặp sự cố khi tạo câu trả lời. "
+                            "Vui lòng thử lại sau.", 
+                            ""
+                        )
 
-            # ── Memory ────────────────────────────────────────────────────────────
-            self.memory.add_message(session_id, query, final_answer)
+            # ── Cache Write & Memory ──────────────────────────────────────────────
+            if not IS_EVAL_MODE and final_answer and analysis.intent != "general":
+                try:
+                    self.cache.store_generation(
+                        query           = query, 
+                        query_embedding = query_embedding, 
+                        answer          = final_answer, 
+                        context         = final_context,
+                        complexity      = profile.complexity,
+                        tier            = profile.tier
+                    )
+                except Exception: pass
+
+            try:
+                self.memory.add_message(session_id, query, final_answer)
+            except Exception as e:
+                logger.error(f"[REDIS_ERROR] Failed to save message: {e}")
 
             return final_answer, final_context
 
         except Exception as e:
-            err_msg = f"❌ [Lỗi hệ thống]: {str(e)}"
-            logger.error(err_msg)
-            return "Hệ thống hiện đang gặp sự cố kết nối tới cơ sở dữ liệu (Qdrant/MinIO). Vui lòng kiểm tra lại hạ tầng Docker.", ""
+            logger.critical(f"[CRITICAL_ERROR] Unexpected pipeline failure: {e}")
+            return "Đã xảy ra lỗi hệ thống nghiêm trọng. Chúng tôi đã ghi nhận sự cố.", ""
 
 
     def process(self, raw_query: str, session_id: str = "default") -> str:

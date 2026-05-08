@@ -82,6 +82,24 @@ class GroqRotatorClient:
     def _rotate(self) -> None:
         self._current_idx = (self._current_idx + 1) % len(self._slots)
 
+    def status(self) -> dict:
+        with self._lock:
+            total = len(self._slots)
+            available = sum(1 for s in self._slots if s.is_available)
+            cooldowns = [
+                {
+                    "index": s.index,
+                    "remaining_seconds": max(0, int(s.exhausted_until - time.monotonic()))
+                }
+                for s in self._slots if not s.is_available
+            ]
+            return {
+                "total_keys": total,
+                "available_keys": available,
+                "cooldowns": cooldowns,
+                "healthy": available > 0
+            }
+
     def call_with_rotation(self, method_path: str, **kwargs):
         max_attempts = len(self._slots) * 2
 

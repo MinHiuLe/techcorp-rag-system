@@ -64,16 +64,25 @@ Every user query must traverse these stages in sequence:
 
 ### 1. Security & Access Control
 -   **API Protection:** Sensitive endpoints (`/chat`, `/keys/status`) MUST be protected by `X-API-Key` authentication.
+-   **Public Health:** The `/health` endpoint MUST remain public (unauthenticated) to allow external monitoring and orchestrator (Docker/K8s) health checks.
 -   **Rate Limiting:** Implement a global limit (default: 20 req/min) via `slowapi` and Redis to prevent quota exhaustion and abuse.
 -   **Credential Safety:** NEVER hardcode API keys. Use `os.getenv` or `pydantic-settings`. Leaked keys must be immediately rotated and marked as exhausted in the rotator.
 
 ### 2. State & Persistence
--   **Session Memory:** Use `RedisMemory` for chat history persistence. In-memory storage is strictly prohibited to ensure state survival across container restarts.
+-   **Session Memory:** Use `RedisMemory` for chat history persistence.
+-   **Graceful Degradation:** If Redis is unreachable, the system MUST fallback to stateless operation (empty history) rather than crashing.
 -   **Deployment:** Use `docker-compose.dev.yml` for active development (volume mounts) and `docker-compose.prod.yml` for production (COPY source, resource limits).
 
-### 3. Observability
--   **Standardized Logging:** Use the Python `logging` module. `print()` statements are prohibited in core and pipeline logic.
--   **Error Handling:** Implement exponential backoff for external API calls (Gemini, Cohere) to handle transient 500 errors or 429 rate limits.
+### 3. Observability & Reliability
+-   **Health Check Protocol:** All core components (Groq, Redis, Qdrant) MUST implement a `status()` method. The `/health` API aggregates these into a single report.
+-   **Fail-Fast Search:** Qdrant Client timeout MUST be capped at **5 seconds** to ensure responsive graceful degradation when the vector store is under load.
+-   **Structured Logging:** Standardized log prefixes MUST be used:
+    - `[TOKEN_AUDIT]`: Usage monitoring.
+    - `[REDIS_ERROR]`: Persistence issues (degraded state).
+    - `[QDRANT_ERROR]`: Retrieval failures.
+    - `[GROQ_ERROR]`: Utility/Generation failures.
+    - `[PII]`: Scrubbing events.
+-   **Error Handling:** Implement exponential backoff for external API calls and return user-friendly maintenance messages for known failure modes. Return HTTP 503 for backend service unavailability.
 
 ---
 

@@ -18,6 +18,13 @@ class RedisMemory:
     def _get_key(self, session_id: str) -> str:
         return f"session_memory:{session_id}"
 
+    def status(self) -> dict:
+        try:
+            self.client.ping()
+            return {"healthy": True, "message": "Connected"}
+        except Exception as e:
+            return {"healthy": False, "message": str(e)}
+
     def get_history(self, session_id: str) -> List[Dict[str, str]]:
         key = self._get_key(session_id)
         data = self.client.get(key)

@@ -97,12 +97,12 @@ def _extract_sources(context: str) -> str | None:
 
 @app.get("/health")
 async def health_check():
-    cache_stats = rag_engine.cache.stats() if rag_engine else {}
-    return {
-            "status": "healthy",
-            "model_loaded": rag_engine is not None,
-            "cache": cache_stats,
-    }
+    if not rag_engine:
+        return {"status": "starting", "healthy": False}
+    
+    report = rag_engine.health_check()
+    report["cache"] = rag_engine.cache.stats()
+    return report
 
 
 @app.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
@@ -121,6 +121,13 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
             session_id=chat_request.session_id
         )
         
+        # Detect maintenance messages from engine to return 503 instead of 200
+        maintenance_keywords = [
+            "sự cố kết nối", "bảo trì hạ tầng", "quá tải", "thử lại sau"
+        ]
+        if any(kw in answer for kw in maintenance_keywords) and not context:
+             raise HTTPException(status_code=503, detail=answer)
+
         scrubbed = scrub(answer)
         if scrubbed.hits > 0:
             logger.warning("[PII] %d match(es) scrubbed | session=%s",
@@ -139,7 +146,8 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
             latency_seconds=latency,
         )
 
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Lỗi xử lý query: {e}")
         raise HTTPException(status_code=500, detail="Lỗi nội bộ hệ thống RAG.")
