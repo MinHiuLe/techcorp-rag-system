@@ -256,7 +256,17 @@ CÂU HỎI GỐC: {query}"""
                     logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
 
             if analysis.intent == "general":
-                final_answer  = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
+                try:
+                    final_answer = self.generator.generate(
+                        original_query    = query,
+                        context           = "",
+                        complexity        = profile.complexity,
+                        prompt_tier       = "GENERAL",
+                        max_output_tokens = profile.max_output_tokens,
+                    )
+                except Exception as e:
+                    logger.error(f"[GROQ_ERROR] Generation failed: {e}")
+                    final_answer = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
                 final_context = ""
 
             else:

@@ -19,7 +19,7 @@ Every user query must traverse these stages in sequence:
     -   *Sparse:* BM25 via `fastembed`.
 5.  **Adaptive Reranker:** Cohere `rerank-multilingual-v3.0`. Top-k is dynamically adjusted based on complexity (2 to 4 chunks).
 6.  **Context Builder:** Deduplication and strict truncation (12,000 chars). Formats source as `[Nguồn: filename.md]`.
-7.  **Generator:** Groq `LLaMA 3.3-70B`. Strict adherence to context; must admit if info is missing.
+7.  **Generator:** Groq `LLaMA 3.3-70B`. Strict adherence to context for technical queries. General queries (non-RAG) use a friendly assistant prompt. Must admit if technical info is missing.
 
 ### 2. Ingestion & Chunking Logic
 -   **Split Point:** Split on `##` sections only. Keep `###` subsections within their parent chunk to preserve semantic context.

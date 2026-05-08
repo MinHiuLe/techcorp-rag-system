@@ -91,6 +91,15 @@ GENERATOR_PROMPTS = {
         "\u2022 Kiểm tra số học trước khi so sánh\n\n"
         "CÂU HỎI: {query}",
     ),
+
+    "GENERAL": (
+        "Bạn là AI Assistant nội bộ TechCorp. Hãy trả lời các câu hỏi giao tiếp thông thường, "
+        "hoặc kiến thức cơ bản (chào hỏi, ngày tháng, tính toán cơ bản) một cách thân thiện, ngắn gọn. "
+        "Tuyệt đối không bịa đặt các thông tin, quy trình, chính sách nội bộ TechCorp. "
+        "Nếu người dùng hỏi về công việc, hãy hướng dẫn họ đặt câu hỏi cụ thể.",
+        
+        "CÂU HỎI: {query}"
+    ),
 }
 
 
