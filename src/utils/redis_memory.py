@@ -1,5 +1,8 @@
 import json
 import redis
+import time
+import os
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict
 from config.settings import settings
 
@@ -36,3 +39,36 @@ class RedisMemory:
     def clear(self, session_id: str):
         key = self._get_key(session_id)
         self.client.delete(key)
+
+    def save_feedback(self, session_id: str, query: str, answer: str, context: str, is_positive: bool, source: str = None):
+        """
+        Lưu phản hồi từ người dùng vào Redis và ghi log persistent vào file.
+        """
+        # Sử dụng giờ Việt Nam (UTC+7)
+        vn_tz = timezone(timedelta(hours=7))
+        timestamp = datetime.now(vn_tz).strftime("%Y-%m-%d %H:%M:%S")
+        feedback_data = {
+            "timestamp": timestamp,
+            "session_id": session_id,
+            "query": query,
+            "answer": answer,
+            "context": context,
+            "is_positive": is_positive,
+            "source": source
+        }
+        
+        # 1. Lưu vào Redis (truy xuất nhanh/hàng đợi)
+        self.client.lpush("kb:feedback_logs", json.dumps(feedback_data))
+        
+        # 2. Ghi vào file persistent (để theo dõi lâu dài)
+        # Thư mục storage/ đã được mount volume trong docker-compose
+        log_path = "storage/feedback_audit.jsonl"
+        try:
+            # Tạo thư mục nếu chưa có (trong trường hợp chạy local ko qua docker)
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(feedback_data, ensure_ascii=False) + "\n")
+        except Exception as e:
+            # Không để lỗi ghi file làm crash app, chỉ log lại
+            print(f"⚠️ Warning: Không thể ghi feedback vào file: {e}")

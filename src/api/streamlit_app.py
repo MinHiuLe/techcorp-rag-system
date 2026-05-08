@@ -11,11 +11,52 @@ st.set_page_config(
     layout="centered"
 )
 
-API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
+# Ưu tiên lấy API_BASE_URL (cho chat + feedback)
+# Nếu không có, thử lấy từ API_URL (cũ) và lọc bỏ phần /chat
+api_url_env = os.getenv("API_URL", "")
+default_base = api_url_env.replace("/chat", "") if api_url_env else "http://api:8000"
+
+API_BASE_URL = os.getenv("API_BASE_URL", default_base)
+CHAT_URL     = f"{API_BASE_URL}/chat"
+FEEDBACK_URL = f"{API_BASE_URL}/chat/feedback"
+API_KEY      = os.getenv("API_KEY", "") # Cần API Key nếu API yêu cầu
 
 # Timeout config — tăng lên 60s để handle multi-topic queries
-# Single-topic: ~5-8s | Multi-topic: ~12-20s | Buffer: đủ rộng
 REQUEST_TIMEOUT = 60
+
+# ── Feedback Callback ────────────────────────────────────────────────────────
+def handle_feedback(msg_index: int):
+    # Lấy phản hồi từ state của widget
+    feedback_val = st.session_state.get(f"fb_{msg_index}")
+    if feedback_val is None:
+        return
+    
+    # Map: 0 -> Thumbs Down (False), 1 -> Thumbs Up (True)
+    is_positive = (feedback_val == "👍") # st.feedback("thumbs") trả về "👍" hoặc "👎" trong bản mới hoặc 0/1 tùy version. 
+    # Trong Streamlit 1.35.0+, st.feedback("thumbs") trả về 0 (down) hoặc 1 (up) hoặc None.
+    # Kiểm tra kiểu dữ liệu trả về
+    is_positive = bool(feedback_val) 
+
+    msg = st.session_state.messages[msg_index]
+    # Query là tin nhắn ngay trước đó của user
+    query = st.session_state.messages[msg_index-1]["content"] if msg_index > 0 else "Unknown"
+    
+    payload = {
+        "query": query,
+        "answer": msg["content"],
+        "context": msg.get("raw_context", ""),
+        "is_positive": is_positive,
+        "session_id": "user_123",
+        "source": msg.get("source")
+    }
+    
+    headers = {"X-API-Key": API_KEY} if API_KEY else {}
+    
+    try:
+        requests.post(FEEDBACK_URL, json=payload, headers=headers, timeout=5)
+        st.toast("Cảm ơn bạn đã phản hồi! ❤️" if is_positive else "Cảm ơn bạn, chúng tôi sẽ cải thiện! 🛠️")
+    except Exception as e:
+        st.error(f"Không thể gửi phản hồi: {e}")
 
 st.markdown("""
 <style>
@@ -242,6 +283,18 @@ else:
             index   = i,
         )
 
+        # Feedback widget cho assistant message
+        if m["role"] == "assistant":
+            # Tạo unique key cho feedback widget
+            fb_key = f"fb_{i}"
+            # Render feedback widget ngay bên dưới bubble
+            st.feedback(
+                "thumbs", 
+                key=fb_key, 
+                on_change=handle_feedback, 
+                args=(i,)
+            )
+
 # ── Input ─────────────────────────────────────────────────────────────────────
 if prompt := st.chat_input("Nhập câu hỏi tại đây..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -260,11 +313,13 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     )
 
     with st.spinner(spinner_msg):
+        headers = {"X-API-Key": API_KEY} if API_KEY else {}
         try:
             res = requests.post(
-                API_URL,
+                CHAT_URL,
                 json={"query": last_prompt, "session_id": "user_123"},
-                timeout=REQUEST_TIMEOUT,  # 60s thay vì 30s
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if res.status_code == 200:
@@ -272,24 +327,32 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 answer  = data.get("answer", "Không có phản hồi.")
                 latency = data.get("latency_seconds")
                 source  = data.get("source")
+                # Giả sử API chưa trả về context trực tiếp, ta có thể cần điều chỉnh API
+                # Hiện tại app.py trả về ChatResponse (answer, source, latency)
+                # Ta cần app.py trả về cả context để lưu feedback chính xác nhất.
+                raw_context = data.get("context", "") # Cần check app.py có trả về ko
             else:
                 answer  = f"Rất tiếc, đã có lỗi xảy ra (HTTP {res.status_code})."
                 latency = None
                 source  = None
+                raw_context = None
 
         except requests.exceptions.Timeout:
-            answer  = "⏱ Request timeout — câu hỏi quá phức tạp hoặc server đang bận. Hãy thử lại hoặc tách thành câu hỏi đơn giản hơn."
+            answer  = "⏱ Request timeout — câu hỏi quá phức tạp hoặc server đang bận."
             latency = None
             source  = None
+            raw_context = None
         except Exception as e:
             answer  = f"Lỗi kết nối: {e}"
             latency = None
             source  = None
+            raw_context = None
 
     st.session_state.messages.append({
         "role"   : "assistant",
         "content": answer,
         "latency": latency,
         "source" : source,
+        "raw_context": raw_context
     })
     st.rerun()

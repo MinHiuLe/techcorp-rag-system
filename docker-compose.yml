@@ -20,6 +20,12 @@ services:
       - qdrant_data_volume:/qdrant/storage
     restart: always
 
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
   api:
     build:
       context: .
@@ -31,6 +37,7 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=hieule
       - MINIO_SECRET_KEY=hieule123
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env
@@ -38,6 +45,7 @@ services:
     depends_on:
       - qdrant
       - minio
+      - redis
     restart: always
 
   ui:
@@ -47,7 +55,7 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - API_URL=http://api:8000/chat
+      - API_BASE_URL=http://api:8000
     volumes:
       - .:/app  
     depends_on:

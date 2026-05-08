@@ -73,8 +73,18 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     source: str | None = None
+    context: str | None = None
     latency_seconds: float
     status: str = "success"
+
+
+class FeedbackRequest(BaseModel):
+    query: str
+    answer: str
+    context: str | None = None
+    is_positive: bool
+    session_id: str = "default"
+    source: str | None = None
 
 
 def _extract_sources(context: str) -> str | None:
@@ -117,6 +127,7 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
         return ChatResponse(
             answer=answer,
             source=source,
+            context=context,
             latency_seconds=latency,
         )
 
@@ -124,6 +135,26 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
     except Exception as e:
         logger.error(f"Lỗi xử lý query: {e}")
         raise HTTPException(status_code=500, detail="Lỗi nội bộ hệ thống RAG.")
+
+
+@app.post("/chat/feedback", dependencies=[Depends(verify_api_key)])
+async def feedback_endpoint(feedback: FeedbackRequest):
+    if not rag_engine:
+        raise HTTPException(status_code=503, detail="Hệ thống chưa sẵn sàng.")
+    
+    try:
+        rag_engine.memory.save_feedback(
+            session_id=feedback.session_id,
+            query=feedback.query,
+            answer=feedback.answer,
+            context=feedback.context or "",
+            is_positive=feedback.is_positive,
+            source=feedback.source
+        )
+        return {"status": "success", "message": "Cảm ơn bạn đã phản hồi!"}
+    except Exception as e:
+        logger.error(f"Lỗi lưu phản hồi: {e}")
+        raise HTTPException(status_code=500, detail="Không thể lưu phản hồi.")
 
 
 @app.delete("/chat/memory/{session_id}")

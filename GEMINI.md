@@ -54,6 +54,23 @@ Every user query must traverse these stages in sequence:
 
 ---
 
+## Infrastructure & Security Protocols
+
+### 1. Security & Access Control
+-   **API Protection:** Sensitive endpoints (`/chat`, `/keys/status`) MUST be protected by `X-API-Key` authentication.
+-   **Rate Limiting:** Implement a global limit (default: 20 req/min) via `slowapi` and Redis to prevent quota exhaustion and abuse.
+-   **Credential Safety:** NEVER hardcode API keys. Use `os.getenv` or `pydantic-settings`. Leaked keys must be immediately rotated and marked as exhausted in the rotator.
+
+### 2. State & Persistence
+-   **Session Memory:** Use `RedisMemory` for chat history persistence. In-memory storage is strictly prohibited to ensure state survival across container restarts.
+-   **Deployment:** Use `docker-compose.dev.yml` for active development (volume mounts) and `docker-compose.prod.yml` for production (COPY source, resource limits).
+
+### 3. Observability
+-   **Standardized Logging:** Use the Python `logging` module. `print()` statements are prohibited in core and pipeline logic.
+-   **Error Handling:** Implement exponential backoff for external API calls (Gemini, Cohere) to handle transient 500 errors or 429 rate limits.
+
+---
+
 ## Development Workflow
 -   **Local Development:** Use Docker Compose for services. Hot-reload is enabled via bind mounts.
 -   **Environment:** Maintain `.env` keys for Groq, Cohere, and LangSmith.
