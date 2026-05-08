@@ -13,6 +13,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from src.pipelines.orchestration import ProductionRAG
+from src.utils.pii_scrubber import scrub
 from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -119,6 +120,13 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
             chat_request.query, 
             session_id=chat_request.session_id
         )
+        
+        scrubbed = scrub(answer)
+        if scrubbed.hits > 0:
+            logger.warning("[PII] %d match(es) scrubbed | session=%s",
+                           scrubbed.hits, chat_request.session_id)
+        answer = scrubbed.text
+
         source = _extract_sources(context)
         latency = round(time.time() - start_time, 2)
 

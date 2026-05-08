@@ -48,9 +48,15 @@ Every user query must traverse these stages in sequence:
 ---
 
 ## Security & Reliability Protocols
--   **No Hallucinations:** Never attempt to answer technical questions without document grounding.
+
+### 1. No Hallucinations
+-   Never attempt to answer technical questions without document grounding.
 -   **Citation Format:** Citations must be explicitly linked to the filename from MinIO.
--   **Data Privacy:** Internal TechCorp documents (HR/IT) are protected; the RAG system is the only authorized interface for LLM interaction with these files.
+
+### 2. Security Guardrails
+-   **Prompt Injection:** Use `_INJECTION_PATTERNS` to detect and block malicious system overrides before the pipeline starts.
+-   **Off-topic Guard:** If retrieval returns no relevant context for a technical query, refuse to answer instead of hallucinating.
+-   **PII Scrubbing:** All generator outputs MUST pass through `pii_scrubber.py` to mask sensitive data (emails, phones, IDs) before reaching the user.
 
 ---
 
@@ -68,6 +74,19 @@ Every user query must traverse these stages in sequence:
 ### 3. Observability
 -   **Standardized Logging:** Use the Python `logging` module. `print()` statements are prohibited in core and pipeline logic.
 -   **Error Handling:** Implement exponential backoff for external API calls (Gemini, Cohere) to handle transient 500 errors or 429 rate limits.
+
+---
+
+## Data Strategy & Quality Loop
+
+### 1. Feedback Loop (Human-in-the-loop)
+-   **UI Interaction:** Assistant messages must include Thumbs Up/Down widgets.
+-   **Context Capture:** Every feedback entry MUST include the `original_query`, `bot_answer`, and the `raw_context` (retrieved chunks) used for generation.
+-   **Persistent Audit:** Logs must be saved in real-time to `storage/feedback_audit.jsonl`. This file is the "ground truth" for future fine-tuning and system evaluation.
+
+### 2. Timezone & Localization
+-   **Standard:** All logs and timestamps MUST use **Vietnam Time (ICT / UTC+7)**.
+-   **Implementation:** Explicitly use `timezone(timedelta(hours=7))` in Python logic to bypass container-level UTC defaults.
 
 ---
 

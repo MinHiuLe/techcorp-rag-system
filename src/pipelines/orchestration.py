@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import cohere
 from qdrant_client import QdrantClient
@@ -23,6 +24,23 @@ logger = logging.getLogger(__name__)
 
 
 class ProductionRAG:
+    _INJECTION_PATTERNS = [
+        re.compile(r"ignore (all |previous |above )?instructions", re.I),
+        re.compile(r"forget (everything|all|your instructions)", re.I),
+        re.compile(r"you are now", re.I),
+        re.compile(r"act as (a|an)(?!y)\b", re.I),
+        re.compile(r"jailbreak", re.I),
+        re.compile(r"system prompt", re.I),
+        re.compile(r"<\|.*?\|>"),
+        re.compile(r"###\s*(instruction|system)", re.I),
+    ]
+
+    _INJECTION_RESPONSE = (
+        "Yêu cầu này không được hỗ trợ. "
+        "Vui lòng đặt câu hỏi liên quan đến tài liệu nội bộ TechCorp.",
+        ""
+    )
+
     def __init__(self):
         # ── LLM Clients ───────────────────────────────────────────────────────
         self.groq_client   = Groq(api_key=settings.GROQ_API_KEY)
@@ -62,6 +80,9 @@ class ProductionRAG:
             self.cache.validate_and_clean()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _is_injection(self, query: str) -> bool:
+        return any(pattern.search(query) for pattern in self._INJECTION_PATTERNS)
 
     def clear_memory(self, session_id: str = "default") -> None:
         self.memory.clear(session_id)
@@ -145,6 +166,10 @@ CÂU HỎI GỐC: {query}"""
     def process_with_context(self, raw_query: str, session_id: str = "default") -> tuple[str, str]:
         try:
             query       = clean_text(raw_query)
+            if self._is_injection(query):
+                logger.warning("[Guardrail] Injection attempt blocked | session=%s", session_id)
+                return self._INJECTION_RESPONSE
+
             history_str = self._get_formatted_history(session_id)
 
             # ── Query Analysis & Resource Profiling ───────────────
@@ -277,7 +302,12 @@ CÂU HỎI GỐC: {query}"""
 
                 # ── Generate (BUG FIX 2) ──────────────────────────────────────────
                 if not final_context:
-                    final_answer = "Hệ thống chưa có tài liệu về vấn đề này."
+                    logger.info("[Guardrail] Off-topic blocked | session=%s | query=%s",
+                                session_id, query[:60])
+                    final_answer = (
+                        "Xin lỗi, câu hỏi này nằm ngoài phạm vi tài liệu nội bộ TechCorp. "
+                        "Tôi chỉ có thể hỗ trợ các vấn đề về IT, HR và Sales."
+                    )
                 else:
                     final_answer = self.generator.generate(
                         original_query    = query,
