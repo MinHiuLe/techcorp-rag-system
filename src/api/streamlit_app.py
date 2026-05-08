@@ -58,6 +58,92 @@ def handle_feedback(msg_index: int):
     except Exception as e:
         st.error(f"Không thể gửi phản hồi: {e}")
 
+# ── Preview Source Dialog ─────────────────────────────────────────────────────
+@st.dialog("📄 Chi tiết tài liệu nguồn", width="large")
+def preview_source_dialog(file_name: str, raw_context: str = None):
+    import os
+    search_dirs = ["data", "docs/knowledge", "docs", "."]
+    file_path = None
+    
+    def find_file(name, path):
+        for root, dirs, files in os.walk(path):
+            if name in files:
+                return os.path.join(root, name)
+        return None
+
+    base_name = os.path.basename(file_name)
+
+    for d in search_dirs:
+        if os.path.exists(d):
+            file_path = find_file(base_name, d)
+            if file_path:
+                break
+                
+    if file_path:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            content = f"❌ Lỗi khi đọc file: {e}"
+    else:
+        content = f"❌ Không tìm thấy nội dung cho tài liệu: `{file_name}` trong hệ thống."
+
+    # Xử lý tìm và đánh dấu vị trí đoạn text được retrieval
+    target_injected = False
+    if raw_context:
+        retrieved_chunks = []
+        blocks = raw_context.split("[Nguồn: ")
+        for b in blocks:
+            if b.strip() and b.startswith(file_name + "]"):
+                chunk = b[len(file_name)+1:].strip()
+                if chunk.endswith("---"):
+                    chunk = chunk[:-3].strip()
+                if chunk:
+                    retrieved_chunks.append(chunk)
+                    
+        if retrieved_chunks:
+            # Chỉ cần trỏ đến chunk đầu tiên tìm thấy
+            for chunk in retrieved_chunks:
+                # Lấy dòng dài nhất/đầu tiên trong chunk để tìm (tránh bị lỗi do chunker nối thêm header)
+                lines = [line.strip() for line in chunk.split('\n') if len(line.strip()) > 20]
+                if lines:
+                    search_str = lines[0]
+                    if search_str in content:
+                        replacement = f'<div id="retrieval-target"></div><mark style="background-color: #fef08a; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85em;">🎯 KẾT QUẢ TRÍCH XUẤT</mark>\n\n{search_str}'
+                        content = content.replace(search_str, replacement, 1)
+                        target_injected = True
+                        break
+
+    st.markdown(f"**Đường dẫn:** `{file_path or file_name}`")
+    st.divider()
+    
+    with st.container(height=500):
+        if file_path and file_path.endswith('.md'):
+            st.markdown(content, unsafe_allow_html=True)
+        else:
+            st.text(content)
+            
+    # Nút đóng rõ ràng theo yêu cầu
+    cols = st.columns([8, 2])
+    if cols[1].button("Đóng", use_container_width=True):
+        st.rerun()
+
+    # JS để tự động cuộn đến vị trí đánh dấu
+    if target_injected:
+        import streamlit.components.v1 as components
+        components.html("""
+            <script>
+            setTimeout(function() {
+                const parentDoc = window.parent.document;
+                const target = parentDoc.getElementById('retrieval-target');
+                if (target) {
+                    target.scrollIntoView({behavior: 'smooth', block: 'center'});
+                }
+            }, 500);
+            </script>
+        """, height=0)
+
+
 st.markdown("""
 <style>
 :root {
@@ -171,14 +257,9 @@ html, body, [data-testid="stAppViewContainer"] {
     flex-wrap: wrap;
 }
 
+/* Ẩn HTML chip cũ nếu còn sót */
 .source-chip {
-    font-size: 0.7rem;
-    color: #64748b;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-family: monospace;
+    display: none; 
 }
 
 .latency-chip {
@@ -186,6 +267,51 @@ html, body, [data-testid="stAppViewContainer"] {
     color: #94a3b8;
     font-family: monospace;
 }
+
+/* Biến st.button thành tag inline sát nhau */
+div[data-testid="stHorizontalBlock"] {
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    width: auto !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"] button {
+    font-size: 0.7rem !important;
+    color: #64748b !important;
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 2px 8px !important;
+    border-radius: 4px !important;
+    font-family: monospace !important;
+    min-height: 24px !important;
+    height: auto !important;
+    line-height: 1.5 !important;
+    transition: all 0.2s !important;
+    margin: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"] button p {
+    font-size: 0.7rem !important;
+    margin: 0 !important;
+    color: #64748b !important;
+}
+
+div[data-testid="stHorizontalBlock"] button:hover {
+    background-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+    color: #1e293b !important;
+    transform: translateY(-1px);
+}
+div[data-testid="stHorizontalBlock"] button:hover p {
+    color: #1e293b !important;
+}
+
+
 
 [data-testid="stChatInput"] {
     border-radius: 18px !important;
@@ -233,31 +359,36 @@ st.markdown("""
 
 
 # ── Render ────────────────────────────────────────────────────────────────────
-def render_message(role: str, content: str, latency: float = None, source: str = None, index: int = 0):
+def render_message(role: str, content: str, latency: float = None, source: str = None, raw_context: str = None, index: int = 0):
     cls   = "msg-user" if role == "user" else "msg-bot"
     label = "Bạn" if role == "user" else "KnowBot"
     delay = min(index * 0.05, 0.5)
 
     meta_html = ""
+    sources = []
     if role == "assistant":
-        chips = ""
         if source:
-            for s in source.split(","):
-                s = s.strip()
-                if s:
-                    chips += f'<span class="source-chip">📄 {s}</span>'
+            sources = [s.strip() for s in source.split(",") if s.strip()]
+            
         lat_html = f'<span class="latency-chip">⏱ {latency}s</span>' if latency else ""
-        if chips or lat_html:
-            meta_html = f'<div class="meta-row">{chips}{lat_html}</div>'
+        if lat_html:
+            meta_html = f'<div class="meta-row">{lat_html}</div>'
 
     st.markdown(f"""
-    <div class="msg-wrap {cls}" style="animation-delay:{delay}s">
+    <div class="msg-wrap {cls}" style="animation-delay:{delay}s; margin-bottom: 5px;">
         <div class="msg-label">{label}</div>
         <div class="msg-bubble">{content}</div>
         {meta_html}
     </div>
     """, unsafe_allow_html=True)
-
+    
+    # Hiển thị các nút source bên dưới bubble
+    if sources:
+        # Dùng CSS stColumn auto-width nên chỉ cần bấy nhiêu cột
+        cols = st.columns(len(sources)) 
+        for idx, s in enumerate(sources):
+            if cols[idx].button(f"📄 {s}", key=f"btn_src_{index}_{idx}", help="Nhấn để xem trước nội dung tài liệu"):
+                preview_source_dialog(s, raw_context)
 
 # ── History ───────────────────────────────────────────────────────────────────
 if not st.session_state.messages:
@@ -280,6 +411,7 @@ else:
             content = m["content"],
             latency = m.get("latency"),
             source  = m.get("source"),
+            raw_context = m.get("raw_context"),
             index   = i,
         )
 

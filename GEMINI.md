@@ -12,7 +12,7 @@ Every user query must traverse these stages in sequence:
 1.  **Multi-Stage Cache:** 
     -   *Semantic Cache:* Qdrant-backed embedding lookup (threshold 0.90).
     -   *Rewrite Cache:* Skips LLM rewriting for repeat queries.
-2.  **Query Analyzer:** Intent detection (`technical` vs `general`), `complexity_score`, and `ambiguity_score`.
+2.  **Query Analyzer:** Intent detection (`technical` vs `general`) với cơ chế **keyword-based override** để đảm bảo không bỏ sót các câu hỏi chính sách/quy trình. Tính toán `complexity_score` và `ambiguity_score`.
 3.  **Conditional Rewriter:** Triggers only if `complexity >= 0.5` or `ambiguity >= 0.4`. Includes an "over-rewrite guard" (output length < 2.5x original).
 4.  **Hybrid Retrieval:** Reciprocal Rank Fusion (RRF) combining:
     -   *Dense:* `AITeamVN/Vietnamese_Embedding` (1024d).
@@ -51,7 +51,7 @@ Every user query must traverse these stages in sequence:
 
 ### 1. No Hallucinations
 -   Never attempt to answer technical questions without document grounding.
--   **Citation Format:** Citations must be explicitly linked to the filename from MinIO.
+-   **Citation Format:** Citations phải được liên kết rõ ràng với tên file từ MinIO. Hệ thống hỗ trợ **interactive preview** (modal) với khả năng tự động cuộn đến vị trí trích xuất (auto-scroll).
 
 ### 2. Security Guardrails
 -   **Prompt Injection:** Use `_INJECTION_PATTERNS` to detect and block malicious system overrides before the pipeline starts.
@@ -89,7 +89,7 @@ Every user query must traverse these stages in sequence:
 ## Data Strategy & Quality Loop
 
 ### 1. Feedback Loop (Human-in-the-loop)
--   **UI Interaction:** Assistant messages must include Thumbs Up/Down widgets.
+-   **UI Interaction:** Assistant messages phải bao gồm Thumbs Up/Down widgets và **Interactive Source Viewer** để tra cứu nhanh tài liệu gốc.
 -   **Context Capture:** Every feedback entry MUST include the `original_query`, `bot_answer`, and the `raw_context` (retrieved chunks) used for generation.
 -   **Persistent Audit:** Logs must be saved in real-time to `storage/feedback_audit.jsonl`. This file is the "ground truth" for future fine-tuning and system evaluation.
 

@@ -47,7 +47,8 @@ class QueryAnalyzer:
         "thời hạn", "trách nhiệm", "tần suất", "định kỳ", "điểm",
         "phê duyệt", "procurement", "legal", "phishing", "mật khẩu",
         "security", "ticket", "hotline", "giấy chứng nhận", "bệnh viện",
-        "ốm", "lương tháng 13", "onboarding", "it", "ae", "vp of sales"
+        "ốm", "lương tháng 13", "onboarding", "it", "ae", "vp of sales",
+        "thai sản", "xin nghỉ", "nghỉ thai sản", "nghỉ việc", "có thai", "vợ sinh", "nghỉ đẻ"
     ]
 
     def _is_simple_fact(self, query: str) -> bool:
