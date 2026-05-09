@@ -19,7 +19,7 @@ Every user query must traverse these stages in sequence:
     -   *Sparse:* BM25 via `fastembed`.
 5.  **Adaptive Reranker:** Cohere `rerank-multilingual-v3.0`. Top-k is dynamically adjusted based on complexity (2 to 4 chunks).
 6.  **Context Builder:** Deduplication and strict truncation (12,000 chars). Formats source as `[Nguồn: filename.md]`.
-7.  **Generator:** Groq `LLaMA 3.3-70B`. Sử dụng **API đồng bộ (Synchronous)** để đảm bảo độ tin cậy của việc theo dõi Token Usage trên LangSmith. Strict adherence to context for technical queries. General queries (non-RAG) use a friendly assistant prompt. Must admit if technical info is missing.
+7.  **Generator:** Groq `LLaMA 3.3-70B`. Sử dụng **API đồng bộ (Synchronous)** để đảm bảo độ tin cậy của việc theo dõi Token Usage trên LangSmith. BẮT BUỘC trình bày dữ liệu có tính chất liệt kê/thuộc tính dưới dạng **BẢNG Markdown chuẩn**. TUYỆT ĐỐI KHÔNG dùng thẻ HTML (`<div>`, `<table>`) trong output. Trả lời thẳng vào vấn đề, không mào đầu máy móc. Bắt buộc thừa nhận nếu thông tin kỹ thuật bị thiếu.
 
 ### 2. Ingestion & Chunking Logic
 -   **Multi-format Parsing:** Use `LightweightDocumentParser` (pymupdf4llm, python-docx, python-pptx) to rapidly process PDF, DOCX, and PPTX files without heavy OCR models, preserving Markdown table structures for accurate chunking.

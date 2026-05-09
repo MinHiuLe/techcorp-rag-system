@@ -213,6 +213,7 @@ def process_and_upload():
                     chunk_id = i + j
 
                     try:
+                        is_tbl = bool(re.search(r'^\s*\|?[\s\-:]+\|[\s\-:|]+\|?\s*$', text, re.MULTILINE))
                         payload = ChunkPayload(
                             chunk_id=chunk_id,
                             document_id=doc_meta.document_id,
@@ -220,7 +221,8 @@ def process_and_upload():
                             text=text,
                             category=doc_meta.category,
                             doc_type=doc_meta.doc_type,
-                            security_level=doc_meta.security_level
+                            security_level=doc_meta.security_level,
+                            is_table=is_tbl
                         )
 
                         points.append(

@@ -421,6 +421,26 @@ CÂU HỎI GỐC: {query}"""
                 n_topics=3 if self._is_multi_topic(query, analysis) else 1
             )
 
+            # Stage 1 & 2: Cache Read
+            query_embedding = None
+            if not IS_EVAL_MODE and analysis.intent != "general":
+                try:
+                    query_embedding = self.cache.get_embedding(query)
+                    if query_embedding is None:
+                        query_embedding = self.dense_model.encode(query).tolist()
+                        self.cache.store_embedding(query, query_embedding)
+                        
+                    cached_answer = self.cache.check_generation(
+                        query_embedding, 
+                        min_tier=profile.tier
+                    )
+                    if cached_answer:
+                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
+                        yield cached_answer, "⚡ Pre-Retrieval Cache Hit"
+                        return
+                except Exception as e:
+                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache Read: {e}")
+
             if analysis.intent == "general":
                 final_context = ""
                 stream = self.generator.stream_generate(
@@ -462,7 +482,20 @@ CÂU HỎI GỐC: {query}"""
                 full_answer += chunk
                 yield chunk, final_context
 
-            # Save to memory after stream ends
+            # Save to Cache & Memory after stream ends
+            if not IS_EVAL_MODE and full_answer and analysis.intent != "general" and query_embedding:
+                try:
+                    self.cache.store_generation(
+                        query           = query, 
+                        query_embedding = query_embedding, 
+                        answer          = full_answer, 
+                        context         = final_context,
+                        complexity      = profile.complexity,
+                        tier            = profile.tier
+                    )
+                except Exception as e:
+                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache write failed: {e}")
+
             try:
                 self.memory.add_message(session_id, query, full_answer)
             except Exception: pass

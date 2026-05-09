@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import logging
 import tempfile
 from pathlib import Path
@@ -81,8 +82,16 @@ class LightweightDocumentParser:
                     md_lines.append(text)
             
             for table in doc.tables:
+                seen_tc = set()
                 for idx, row in enumerate(table.rows):
-                    row_data = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
+                    row_data = []
+                    for cell in row.cells:
+                        if id(cell._tc) in seen_tc:
+                            row_data.append("")
+                        else:
+                            text = re.sub(r'\s+', ' ', cell.text.strip())
+                            row_data.append(text)
+                            seen_tc.add(id(cell._tc))
                     md_lines.append("| " + " | ".join(row_data) + " |")
                     if idx == 0:
                         separator = ["---"] * len(row.cells)

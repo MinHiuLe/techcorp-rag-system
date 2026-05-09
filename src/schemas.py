@@ -26,6 +26,7 @@ class ChunkPayload(BaseModel):
     category: str
     doc_type: str
     security_level: str
+    is_table: bool = Field(default=False)
 
 
 class QueryAnalysis(BaseModel):

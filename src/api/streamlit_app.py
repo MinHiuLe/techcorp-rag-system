@@ -275,6 +275,21 @@ html, body, [data-testid="stAppViewContainer"] {
     word-break: break-word;
 }
 
+.msg-bubble table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+.msg-bubble th, .msg-bubble td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+}
+.msg-bubble th {
+    background-color: var(--primary-soft);
+    font-weight: 600;
+}
+
 .msg-bubble p:last-child { margin-bottom: 0; }
 
 .msg-user { align-items: flex-end; }
@@ -323,10 +338,57 @@ html, body, [data-testid="stAppViewContainer"] {
 .meta-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; margin-left: 4px; flex-wrap: wrap; }
 .latency-chip { font-size: 0.7rem; color: #94a3b8; font-family: monospace; }
 
+div[data-testid="stHorizontalBlock"] {
+    gap: 6px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+}
+
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    width: fit-content !important;
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+}
+
 div[data-testid="stHorizontalBlock"] button {
-    font-size: 0.7rem !important; color: #64748b !important; background-color: #f1f5f9 !important;
-    border: 1px solid #e2e8f0 !important; padding: 2px 8px !important; border-radius: 4px !important;
-    font-family: monospace !important; min-height: 24px !important; height: auto !important;
+    font-size: 0.65rem !important;
+    color: #475569 !important;
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 1px 6px !important;
+    border-radius: 4px !important;
+    font-family: inherit !important;
+    min-height: 20px !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    transition: all 0.2s !important;
+    margin: 0 !important;
+    width: fit-content !important;
+    max-width: 200px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
+}
+
+div[data-testid="stHorizontalBlock"] button p {
+    font-size: 0.65rem !important;
+    margin: 0 !important;
+    color: #475569 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+div[data-testid="stHorizontalBlock"] button:hover {
+    background-color: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+}
+div[data-testid="stHorizontalBlock"] button:hover p {
+    color: #0f172a !important;
 }
 
 [data-testid="stChatInput"] {
@@ -380,6 +442,7 @@ def render_message(role: str, content: str, latency: float = None, source: str =
     """, unsafe_allow_html=True)
     
     if sources:
+        st.markdown('<div class="source-marker" style="display:none;"></div>', unsafe_allow_html=True)
         cols = st.columns(len(sources)) 
         for idx, s in enumerate(sources):
             if cols[idx].button(f"📄 {s}", key=f"btn_src_{index}_{idx}"):
@@ -401,34 +464,105 @@ if prompt := st.chat_input("Nhập câu hỏi tại đây..."):
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
+
     placeholder = st.empty()
-    placeholder.markdown('<div class="msg-wrap msg-bot"><div class="msg-label">KnowBot</div><div class="thinking-bubble"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div></div>', unsafe_allow_html=True)
+    
+    # ── Hiệu ứng "Đang suy nghĩ" ─────────────────────────────────────────────
+    thinking_html = """
+    <div class="msg-wrap msg-bot" style="margin-bottom: 5px;">
+        <div class="msg-label">KnowBot</div>
+        <div class="thinking-bubble">
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+            <span class="thinking-text">Đang suy nghĩ...</span>
+        </div>
+    </div>
+    """
+    placeholder.markdown(thinking_html, unsafe_allow_html=True)
     
     headers = {"X-API-Key": API_KEY} if API_KEY else {}
+    
     try:
         start_time = time.time()
-        res = requests.post(CHAT_STREAM_URL, json={"query": last_prompt, "session_id": "user_123"}, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
+        res = requests.post(
+            CHAT_STREAM_URL,
+            json={"query": last_prompt, "session_id": "user_123"},
+            headers=headers,
+            stream=True,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         if res.status_code == 200:
             full_answer = ""
             stream_state = {"source": None, "raw_context": None}
+            buffer = ""
+            last_update = time.time()
+            UPDATE_INTERVAL = 0.05  # Cập nhật UI mỗi 50ms để mượt
             
             for line in res.iter_lines():
                 if line:
-                    data = json.loads(line.decode('utf-8'))
-                    if data["type"] == "metadata":
-                        stream_state["source"] = data.get("source")
-                        stream_state["raw_context"] = data.get("context")
-                    elif data["type"] == "content":
-                        full_answer += data.get("content", "")
-                        placeholder.markdown(f'<div class="msg-wrap msg-bot"><div class="msg-label">KnowBot</div><div class="msg-bubble stream-bubble">{full_answer}<span class="stream-cursor"></span></div></div>', unsafe_allow_html=True)
+                    try:
+                        data = json.loads(line.decode('utf-8'))
+                        if data["type"] == "metadata":
+                            stream_state["source"] = data.get("source")
+                            stream_state["raw_context"] = data.get("context")
+                        elif data["type"] == "content":
+                            content = data.get("content", "")
+                            full_answer += content
+                            buffer += content
+                            
+                            now = time.time()
+                            if now - last_update >= UPDATE_INTERVAL:
+                                safe_content = markdown.markdown(buffer, extensions=[TableExtension(), FencedCodeExtension()])
+                                
+                                html_content = f"""
+                                <div class="msg-wrap msg-bot" style="margin-bottom: 5px;">
+                                    <div class="msg-label">KnowBot</div>
+                                    <div class="msg-bubble stream-bubble">
+                                        <div class="stream-content">{safe_content}<span class="stream-cursor"></span></div>
+                                    </div>
+                                </div>
+                                """
+                                placeholder.markdown(html_content, unsafe_allow_html=True)
+                                last_update = now
+                                
+                    except Exception:
+                        continue
 
             latency = round(time.time() - start_time, 2)
-            # Final render with proper markdown
-            body_html = markdown.markdown(full_answer, extensions=[TableExtension(), FencedCodeExtension()])
-            placeholder.markdown(f'<div class="msg-wrap msg-bot"><div class="msg-label">KnowBot</div><div class="msg-bubble">{body_html}</div></div>', unsafe_allow_html=True)
+            source = stream_state["source"]
+            raw_context = stream_state["raw_context"]
             
-            st.session_state.messages.append({"role": "assistant", "content": full_answer, "latency": latency, "source": stream_state["source"], "raw_context": stream_state["raw_context"]})
+            body_html = markdown.markdown(full_answer, extensions=[TableExtension(), FencedCodeExtension()])
+            final_html = f"""
+            <div class="msg-wrap msg-bot" style="margin-bottom: 5px; animation: fade-in-up 0.3s ease;">
+                <div class="msg-label">KnowBot</div>
+                <div class="msg-bubble">{body_html}</div>
+            </div>
+            """
+            placeholder.markdown(final_html, unsafe_allow_html=True)
+            
+            st.session_state.messages.append({
+                "role"   : "assistant",
+                "content": full_answer,
+                "latency": latency,
+                "source" : source,
+                "raw_context": raw_context
+            })
             st.rerun()
+        else:
+            st.error(f"Lỗi hệ thống (HTTP {res.status_code})")
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"Rất tiếc, đã có lỗi xảy ra (HTTP {res.status_code}).",
+            })
+            st.rerun()
+
     except Exception as e:
-        st.error(f"Lỗi: {e}")
+        st.error(f"Lỗi kết nối: {e}")
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": f"Lỗi kết nối: {e}",
+        })
+        st.rerun()
