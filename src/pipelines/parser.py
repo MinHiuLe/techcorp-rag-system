@@ -82,19 +82,25 @@ class LightweightDocumentParser:
                     md_lines.append(text)
             
             for table in doc.tables:
-                seen_tc = set()
-                for idx, row in enumerate(table.rows):
+                num_rows = len(table.rows)
+                num_cols = len(table.columns)
+                
+                # Biến để kiểm tra xem hàng đó đã được xử lý chưa (tránh ghi đè)
+                for r in range(num_rows):
                     row_data = []
-                    for cell in row.cells:
-                        if id(cell._tc) in seen_tc:
+                    for c in range(num_cols):
+                        try:
+                            # python-docx cell(r, c) trả về cùng một đối tượng Cell cho các ô bị gộp
+                            # Do đó .text sẽ tự động trả về nội dung của ô gộp đó cho mọi vị trí thành phần
+                            cell_text = table.cell(r, c).text.strip()
+                            clean_text = re.sub(r'\s+', ' ', cell_text)
+                            row_data.append(clean_text if clean_text else "")
+                        except Exception:
                             row_data.append("")
-                        else:
-                            text = re.sub(r'\s+', ' ', cell.text.strip())
-                            row_data.append(text)
-                            seen_tc.add(id(cell._tc))
+                    
                     md_lines.append("| " + " | ".join(row_data) + " |")
-                    if idx == 0:
-                        separator = ["---"] * len(row.cells)
+                    if r == 0:
+                        separator = ["---"] * num_cols
                         md_lines.append("| " + " | ".join(separator) + " |")
                 md_lines.append("")
 

@@ -188,12 +188,20 @@ CÂU HỎI GỐC: {query}"""
     # ── Core Pipeline ─────────────────────────────────────────────────────────
 
     @traceable(run_type="chain", name="RAG_Core_Pipeline")
-    def process_with_context(self, raw_query: str, session_id: str = "default") -> tuple[str, str]:
+    def process_with_context(self, raw_query: str, session_id: str = "default") -> dict:
+        import time
+        start_time = time.time()
+        metadata = {"tokens": {"total": 0, "prompt": 0, "completion": 0}}
+        
         try:
             query       = clean_text(raw_query)
             if self._is_injection(query):
                 logger.warning("[Guardrail] Injection attempt blocked | session=%s", session_id)
-                return self._INJECTION_RESPONSE
+                return {
+                    "answer": self._INJECTION_RESPONSE[0],
+                    "context": "",
+                    "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                }
 
             # --- REDIS GRACEFUL DEGRADATION ---
             try:
@@ -209,11 +217,11 @@ CÂU HỎI GỐC: {query}"""
                 analysis = self.analyzer.analyze(query, history_str)
             except Exception as e:
                 logger.error(f"[GROQ_ERROR] Analysis failed: {e}")
-                return (
-                    "Hệ thống hiện đang quá tải hoặc gặp sự cố kết nối với AI Model (Groq). "
-                    "Vui lòng thử lại sau vài giây.", 
-                    ""
-                )
+                return {
+                    "answer": "Hệ thống hiện đang quá tải hoặc gặp sự cố kết nối với AI Model (Groq). Vui lòng thử lại sau vài giây.",
+                    "context": "",
+                    "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                }
             
             # ── TOKEN AUDIT ──────────────────────────────────────
             logger.info(
@@ -251,19 +259,24 @@ CÂU HỎI GỐC: {query}"""
                     )
                     if cached_answer:
                         logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
-                        return cached_answer, "⚡ Pre-Retrieval Cache Hit"
+                        return {
+                            "answer": cached_answer,
+                            "context": "⚡ Pre-Retrieval Cache Hit",
+                            "metadata": {"latency": time.time() - start_time, "tokens": {}, "cache_hit": True}
+                        }
                 except Exception as e:
                     logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
 
             if analysis.intent == "general":
                 try:
-                    final_answer = self.generator.generate(
+                    final_answer, gen_meta = self.generator.generate(
                         original_query    = query,
                         context           = "",
                         complexity        = profile.complexity,
                         prompt_tier       = "GENERAL",
                         max_output_tokens = profile.max_output_tokens,
                     )
+                    metadata["tokens"] = gen_meta
                 except Exception as e:
                     logger.error(f"[GROQ_ERROR] Generation failed: {e}")
                     final_answer = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
@@ -294,11 +307,12 @@ CÂU HỎI GỐC: {query}"""
                         raw_docs = self._merge_docs(docs_per_sq)
                     except Exception as e:
                         logger.error(f"[QDRANT_ERROR] Multi-topic search failed: {e}")
-                        return (
-                            "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. "
-                            "Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
-                            ""
-                        )
+                        return {
+                            "answer": "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
+                            "context": "",
+                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                        }
+
 
                 # ── SINGLE-TOPIC PATH ─────────────────────────────────────────────
                 else:
@@ -325,11 +339,12 @@ CÂU HỎI GỐC: {query}"""
                         raw_docs = self.retriever.search(search_query, strategy, fetch_k)
                     except Exception as e:
                         logger.error(f"[QDRANT_ERROR] Search failed: {e}")
-                        return (
-                            "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. "
-                            "Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
-                            ""
-                        )
+                        return {
+                            "answer": "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
+                            "context": "",
+                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                        }
+
 
                 # ── Rerank ────────────────────────────────────────────────────────
                 try:
@@ -357,20 +372,21 @@ CÂU HỎI GỐC: {query}"""
                     )
                 else:
                     try:
-                        final_answer = self.generator.generate(
+                        final_answer, gen_meta = self.generator.generate(
                             original_query    = query,
                             context           = final_context,
                             complexity        = profile.complexity,
                             prompt_tier       = profile.prompt_tier,
                             max_output_tokens = profile.max_output_tokens,
                         )
+                        metadata["tokens"] = gen_meta
                     except Exception as e:
                         logger.error(f"[GROQ_ERROR] Generation failed: {e}")
-                        return (
-                            "Hệ thống hiện đang gặp sự cố khi tạo câu trả lời. "
-                            "Vui lòng thử lại sau.", 
-                            ""
-                        )
+                        return {
+                            "answer": "Hệ thống hiện đang gặp sự cố khi tạo câu trả lời. Vui lòng thử lại sau.",
+                            "context": "",
+                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                        }
 
             # ── Cache Write & Memory ──────────────────────────────────────────────
             if not IS_EVAL_MODE and final_answer and analysis.intent != "general":
@@ -390,11 +406,20 @@ CÂU HỎI GỐC: {query}"""
             except Exception as e:
                 logger.error(f"[REDIS_ERROR] Failed to save message: {e}")
 
-            return final_answer, final_context
+            metadata["latency"] = time.time() - start_time
+            return {
+                "answer": final_answer,
+                "context": final_context,
+                "metadata": metadata
+            }
 
         except Exception as e:
             logger.critical(f"[CRITICAL_ERROR] Unexpected pipeline failure: {e}")
-            return "Đã xảy ra lỗi hệ thống nghiêm trọng. Chúng tôi đã ghi nhận sự cố.", ""
+            return {
+                "answer": "Đã xảy ra lỗi hệ thống nghiêm trọng. Chúng tôi đã ghi nhận sự cố.",
+                "context": "",
+                "metadata": {"latency": time.time() - start_time, "tokens": {}}
+            }
 
     @traceable(run_type="chain", name="RAG_Streaming_Pipeline")
     def process_with_context_stream(self, raw_query: str, session_id: str = "default"):
@@ -507,8 +532,8 @@ CÂU HỎI GỐC: {query}"""
 
 
     def process(self, raw_query: str, session_id: str = "default") -> str:
-        answer, _ = self.process_with_context(raw_query, session_id)
-        return answer
+        result = self.process_with_context(raw_query, session_id)
+        return result["answer"]
 
 
 if __name__ == "__main__":

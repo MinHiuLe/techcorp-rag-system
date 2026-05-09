@@ -310,11 +310,11 @@ def run_rag_pipeline(inputs: dict) -> dict:
 
     rag_pipeline.clear_memory()
     try:
-        answer, context = rag_pipeline.process_with_context(inputs["question"])
-        return {"answer": answer, "context": context}
+        result = rag_pipeline.process_with_context(inputs["question"])
+        return result
     except Exception as e:
         print(f"⚠️  RAG Pipeline lỗi: {e}")
-        return {"answer": "Error", "context": ""}
+        return {"answer": "Error", "context": "", "metadata": {"latency": 0, "tokens": {}}}
 
 
 # ── Issue Classification (post-judge) ─────────────────────────────────────────
@@ -347,8 +347,13 @@ def evaluate_all(run, example) -> list:
     outputs      = run.outputs or {}
     context      = outputs.get("context", "")
     answer       = outputs.get("answer", "")
+    meta         = outputs.get("metadata", {})
+    
     question     = example.inputs["question"]
-    ground_truth = example.outputs["ground_truth"]
+    ground_truth = example.outputs.get("ground_truth", "")
+    
+    latency      = meta.get("latency", 0)
+    tokens       = meta.get("tokens", {}).get("total_tokens", 0)
 
     print(f"\n  [Eval] Q: {question[:60]}...")
 
@@ -413,6 +418,8 @@ def evaluate_all(run, example) -> list:
         {"key": "strict_faithfulness", "score": round(faith, 2),        "comment": comment},
         {"key": "answer_relevance",    "score": round(relevance, 2),    "comment": f"embedding-based | gen_issue={gen_issue}"},
         {"key": "answer_completeness", "score": round(completeness, 2), "comment": f"{issue} | gen_issue={gen_issue}"},
+        {"key": "latency",             "score": round(latency, 2),      "comment": f"sec"},
+        {"key": "total_tokens",        "score": tokens,                 "comment": f"tokens"},
     ]
 
 
@@ -436,7 +443,12 @@ def analyze_eval_results(results: list[list[dict]]) -> dict:
         "generator_issues": 0,
         "good"            : 0,
         "partial"         : 0,
+        "avg_latency"     : 0.0,
+        "avg_tokens"      : 0.0,
     }
+    
+    total_lat = 0.0
+    total_tok = 0.0
 
     for r in results:
         scores  = {m["key"]: m["score"] for m in r}
@@ -468,7 +480,13 @@ def analyze_eval_results(results: list[list[dict]]) -> dict:
         else:
             stats["partial"] += 1
 
+        # Accumulate metrics for all samples (including those with issues)
+        total_lat += scores.get("latency", 0)
+        total_tok += scores.get("total_tokens", 0)
+
     total = stats["total"] or 1
+    stats["avg_latency"] = total_lat / total
+    stats["avg_tokens"]  = total_tok / total
     print("\n" + "=" * 60)
     print("EVAL ANALYSIS REPORT — v6 (Gemma 4 31B Judge)")
     print("=" * 60)
@@ -478,6 +496,9 @@ def analyze_eval_results(results: list[list[dict]]) -> dict:
     print(f"  🔧 Infra err  : {stats['infra_errors']} ({stats['infra_errors']/total*100:.1f}%)")
     print(f"  🔍 Retrieval  : {stats['retrieval_issues']} ({stats['retrieval_issues']/total*100:.1f}%)")
     print(f"  📝 Generator  : {stats['generator_issues']} ({stats['generator_issues']/total*100:.1f}%)")
+    print("-" * 30)
+    print(f"  ⏱️  Avg Latency: {stats['avg_latency']:.2f}s")
+    print(f"  💰 Avg Tokens : {stats['avg_tokens']:.1f} tokens")
     print("=" * 60)
 
     print("\nRecommendations:")

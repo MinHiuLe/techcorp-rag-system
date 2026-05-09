@@ -139,7 +139,16 @@ class Generator:
                 "max_output_tokens":  max_output_tokens,
             })
 
-        return response.choices[0].message.content
+        metadata = {}
+        if hasattr(response, "usage") and response.usage:
+            metadata = {
+                "prompt_tokens":      response.usage.prompt_tokens,
+                "completion_tokens":  response.usage.completion_tokens,
+                "total_tokens":       response.usage.total_tokens,
+            }
+
+        return response.choices[0].message.content, metadata
+
 
     # Xóa decorator @traceable ở đây và sử dụng context manager `trace` bên trong
     def stream_generate(
