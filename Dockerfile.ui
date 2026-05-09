@@ -4,7 +4,7 @@ WORKDIR /app
 
 # UI chỉ cần streamlit + requests để gọi API qua HTTP
 # Không cần torch, sentence-transformers, fastembed... → build ~60s thay vì ~20 phút
-RUN pip install --no-cache-dir streamlit requests python-dotenv
+RUN pip install --no-cache-dir streamlit requests python-dotenv markdown
 
 COPY . .
 

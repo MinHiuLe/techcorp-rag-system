@@ -17,3 +17,6 @@ python-dotenv
 markdown
 redis
 slowapi
+pymupdf4llm
+python-docx
+python-pptx

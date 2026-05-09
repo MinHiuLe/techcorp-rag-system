@@ -8,10 +8,12 @@ from fastembed import SparseTextEmbedding
 from pydantic import ValidationError
 import re
 
+from pathlib import Path
 from config.settings import settings
 from src.schemas import ChunkPayload
 from src.utils.text_utils import clean_text
 from .extractor import MetadataExtractor
+from .parser import LightweightDocumentParser
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,6 +33,7 @@ qdrant_client = QdrantClient(url=settings.QDRANT_URL, timeout=60)
 dense_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
 sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 extractor = MetadataExtractor()
+lightweight_parser = LightweightDocumentParser()
 
 COLLECTION_NAME = "techcorp_knowledge"
 BATCH_SIZE = 64
@@ -173,57 +176,78 @@ def process_and_upload():
     for obj in response.get("Contents", []):
         file_key = obj["Key"]
 
-        file_data = s3_client.get_object(Bucket=bucket_name, Key=file_key)
-        content = clean_text(file_data["Body"].read().decode("utf-8", errors="ignore"))
-        logger.info(f"👉 File: {file_key} | Ký tự gốc từ MinIO (sau clean): {len(content)}")
-        doc_meta = extractor.process(file_key=file_key, content=content)
+        try:
+            file_data = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+            raw_bytes = file_data["Body"].read()
+            ext = Path(file_key).suffix.lower()
 
-        chunks = smart_markdown_chunker(content)
+            if ext in LightweightDocumentParser.SUPPORTED_EXTENSIONS:
+                logger.info(f"Parsing {file_key} with LightweightParser...")
+                content = lightweight_parser.parse(raw_bytes, file_key)
+            elif ext in {".md", ".txt"} or not ext:
+                content = raw_bytes.decode("utf-8", errors="ignore")
+            else:
+                logger.warning(f"Skipping unsupported file type: {file_key}")
+                continue
 
-        for i in range(0, len(chunks), BATCH_SIZE):
-            batch_texts = chunks[i:i + BATCH_SIZE]
+            content = clean_text(content)
+            
+            if not content.strip():
+                logger.warning(f"Empty content extracted from {file_key}")
+                continue
 
-            dense_vecs = dense_model.encode(batch_texts).tolist()
-            sparse_vecs = list(sparse_model.embed(batch_texts))
+            logger.info(f"👉 File: {file_key} | Ký tự gốc từ MinIO (sau clean): {len(content)}")
+            doc_meta = extractor.process(file_key=file_key, content=content)
 
-            points = []
+            chunks = smart_markdown_chunker(content)
 
-            for j, text in enumerate(batch_texts):
-                chunk_id = i + j
+            for i in range(0, len(chunks), BATCH_SIZE):
+                batch_texts = chunks[i:i + BATCH_SIZE]
 
-                try:
-                    payload = ChunkPayload(
-                        chunk_id=chunk_id,
-                        document_id=doc_meta.document_id,
-                        source=doc_meta.source,
-                        text=text,
-                        category=doc_meta.category,
-                        doc_type=doc_meta.doc_type,
-                        security_level=doc_meta.security_level
-                    )
+                dense_vecs = dense_model.encode(batch_texts).tolist()
+                sparse_vecs = list(sparse_model.embed(batch_texts))
 
-                    points.append(
-                        PointStruct(
-                            id=str(uuid.uuid4()),
-                            vector={
-                                "dense": dense_vecs[j],
-                                "sparse": SparseVector(
-                                    indices=sparse_vecs[j].indices.tolist(),
-                                    values=sparse_vecs[j].values.tolist()
-                                )
-                            },
-                            payload=payload.model_dump()
+                points = []
+
+                for j, text in enumerate(batch_texts):
+                    chunk_id = i + j
+
+                    try:
+                        payload = ChunkPayload(
+                            chunk_id=chunk_id,
+                            document_id=doc_meta.document_id,
+                            source=doc_meta.source,
+                            text=text,
+                            category=doc_meta.category,
+                            doc_type=doc_meta.doc_type,
+                            security_level=doc_meta.security_level
                         )
-                    )
 
-                except ValidationError as e:
-                    logger.error(f"Schema error in file {file_key}: {e}")
+                        points.append(
+                            PointStruct(
+                                id=str(uuid.uuid4()),
+                                vector={
+                                    "dense": dense_vecs[j],
+                                    "sparse": SparseVector(
+                                        indices=sparse_vecs[j].indices.tolist(),
+                                        values=sparse_vecs[j].values.tolist()
+                                    )
+                                },
+                                payload=payload.model_dump()
+                            )
+                        )
 
-            if points:
-                qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
-                total_chunks += len(points)
+                    except ValidationError as e:
+                        logger.error(f"Schema error in file {file_key}: {e}")
 
-        logger.info(f"Processed {len(chunks)} chunks from {file_key}")
+                if points:
+                    qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
+                    total_chunks += len(points)
+
+            logger.info(f"Processed {len(chunks)} chunks from {file_key}")
+
+        except Exception as e:
+            logger.error(f"Error processing file {file_key}: {e}")
 
     logger.info(f"Completed. Total chunks: {total_chunks}")
 

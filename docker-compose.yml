@@ -42,6 +42,7 @@ services:
       - ./storage:/app/storage
       - ./.env:/app/.env
       - .:/app
+      - ~/.cache/huggingface:/root/.cache/huggingface
     depends_on:
       - qdrant
       - minio
