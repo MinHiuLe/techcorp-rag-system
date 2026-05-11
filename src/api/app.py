@@ -1,18 +1,18 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import re
 import time
 import logging
+import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends, Security
+from fastapi import FastAPI, HTTPException, Request, Depends, Security, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import boto3
 
 from src.pipelines.orchestration import ProductionRAG
+from src.pipelines.ingestion import AutoIngestor
 from src.utils.pii_scrubber import scrub
 from config.settings import settings
 
@@ -38,26 +38,103 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
         )
 
 rag_engine: ProductionRAG | None = None
+ingestor: AutoIngestor | None = None
+
+async def register_minio_webhook():
+    """Auto-register webhook notification in MinIO."""
+    logger.info("[INGESTION] Đang đăng ký MinIO Webhook...")
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=f"http://{settings.MINIO_ENDPOINT}",
+        aws_access_key_id=settings.MINIO_ACCESS_KEY,
+        aws_secret_access_key=settings.MINIO_SECRET_KEY,
+        config=boto3.session.Config(signature_version="s3v4"),
+    )
+    
+    bucket = settings.MINIO_BUCKET
+    webhook_arn = "arn:minio:sqs::primary:webhook" # Target 'primary' configured in docker-compose
+    
+    try:
+        # Kiểm tra connectivity & bucket
+        s3.head_bucket(Bucket=bucket)
+        
+        # Đăng ký notification cho cả Created và Removed
+        s3.put_bucket_notification_configuration(
+            Bucket=bucket,
+            NotificationConfiguration={
+                'QueueConfigurations': [
+                    {
+                        'Id': 'AutoIngestionWebhook',
+                        'QueueArn': webhook_arn,
+                        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
+                    }
+                ]
+            }
+        )
+        logger.info(f"[INGESTION] Đăng ký webhook thành công cho bucket '{bucket}' -> {webhook_arn} (Created & Removed)")
+    except Exception as e:
+        logger.warning(f"[INGESTION] Webhook registration failed (Fail-open): {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    global rag_engine
+    global rag_engine, ingestor
     logger.info("Đang khởi tạo ProductionRAG Engine...")
     rag_engine = ProductionRAG()
+    ingestor = AutoIngestor()
+    
+    # Register MinIO Webhook
+    await register_minio_webhook()
+    
     logger.info("Hệ thống RAG đã sẵn sàng nhận request!")
     yield
-    # Shutdown logic (nếu cần)
+    # Shutdown logic
     logger.info("Đang dừng hệ thống...")
 
 app = FastAPI(
     title="TechCorp IT Onboarding RAG API",
     description="API phục vụ tra cứu tài liệu nội bộ với kiến trúc Decision-Driven RAG.",
-    version="1.2.0",
+    version="1.3.1",
     lifespan=lifespan
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- Webhook Endpoint ---
+
+@app.post("/webhook/minio")
+async def minio_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Tiếp nhận event từ MinIO khi có file mới được upload hoặc bị xóa.
+    """
+    try:
+        body = await request.json()
+        if "Event" in body and body["Event"] == "s3:TestEvent":
+            logger.info("[INGESTION] Nhận TestEvent từ MinIO.")
+            return {"status": "ok"}
+
+        records = body.get("Records", [])
+        for record in records:
+            event_name = record.get("eventName", "")
+            bucket = record.get("s3", {}).get("bucket", {}).get("name")
+            key = record.get("s3", {}).get("object", {}).get("key")
+            
+            if bucket and key:
+                from urllib.parse import unquote_plus
+                key = unquote_plus(key)
+                
+                if "ObjectCreated" in event_name:
+                    logger.info(f"[INGESTION] Nhận event Created: {key}. Đang nạp dữ liệu...")
+                    background_tasks.add_task(ingestor.process_single_file, bucket, key)
+                elif "ObjectRemoved" in event_name:
+                    logger.info(f"[INGESTION] Nhận event Removed: {key}. Đang xóa dữ liệu...")
+                    background_tasks.add_task(ingestor.delete_file_data, key)
+        
+        return {"status": "accepted"}
+    except Exception as e:
+        logger.error(f"[INGESTION] Lỗi xử lý webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
 
 @app.get("/keys/status", dependencies=[Depends(verify_api_key)])
 async def key_status():
@@ -174,7 +251,6 @@ async def feedback_endpoint(feedback: FeedbackRequest):
 
 
 from fastapi.responses import StreamingResponse
-import json
 
 @app.post("/chat/stream", dependencies=[Depends(verify_api_key)])
 async def chat_stream_endpoint(chat_request: ChatRequest):
@@ -182,9 +258,6 @@ async def chat_stream_endpoint(chat_request: ChatRequest):
         raise HTTPException(status_code=503, detail="Hệ thống chưa sẵn sàng.")
 
     def stream_generator():
-        # Trích xuất source sau khi có context hoàn chỉnh
-        # Vì context có ngay từ đầu sau khi retrieval xong (trước khi gen bắt đầu)
-        # Chúng ta sẽ gửi context/source ở chunk đầu tiên dưới dạng JSON metadata
         context_sent = False
         
         for chunk, context in rag_engine.process_with_context_stream(

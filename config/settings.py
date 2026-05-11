@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     EVAL_MODE: bool = Field(default=False, env="EVAL_MODE")
     
     REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
+    MINIO_BUCKET: str = Field(default="data", env="MINIO_BUCKET")
     API_KEYS: str = Field(default="", env="API_KEYS") # Comma-separated keys
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

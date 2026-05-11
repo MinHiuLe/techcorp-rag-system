@@ -7,6 +7,8 @@ services:
     environment:
       MINIO_ROOT_USER: hieule
       MINIO_ROOT_PASSWORD: hieule123
+      MINIO_NOTIFY_WEBHOOK_ENABLE_primary: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary: "http://api:8000/webhook/minio"
     command: server /data --console-address ":9001"
     volumes:
       - minio_data_volume:/data
