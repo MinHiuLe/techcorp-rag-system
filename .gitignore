@@ -1,11 +1,16 @@
 # Môi trường ảo (Ngốn vài GB rác)
 venv/
 env/
+# Dữ liệu và Tri thức nội bộ (Chỉ lưu ở Local/MinIO)
 data/
-# File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
-.env
+docs/knowledge/
+
+# File Mandates và Cấu hình (Bảo mật)
 .antigravity
 GEMINI.md
+
+# File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
+.env
 # Database nội bộ và Cache
 storage/
 __pycache__/
