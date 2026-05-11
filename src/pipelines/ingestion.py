@@ -182,7 +182,8 @@ def process_and_upload():
             ext = Path(file_key).suffix.lower()
 
             if ext in LightweightDocumentParser.SUPPORTED_EXTENSIONS:
-                logger.info(f"Parsing {file_key} with LightweightParser...")
+                # Covers: .pdf, .docx, .pptx, .xlsx, .xls
+                logger.info(f"Parsing {file_key} with LightweightParser (ext={ext})...")
                 content = lightweight_parser.parse(raw_bytes, file_key)
             elif ext in {".md", ".txt"} or not ext:
                 content = raw_bytes.decode("utf-8", errors="ignore")

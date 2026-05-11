@@ -105,6 +105,39 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
                 st.error(f"❌ Lỗi khi đọc file PDF: {e}")
                 return
 
+        # Handle Tabular Data (CSV, Excel)
+        if ext in ['.csv', '.xlsx', '.xls']:
+            try:
+                import pandas as pd
+                if ext == '.csv':
+                    # Attempt to detect delimiter
+                    try:
+                        df = pd.read_csv(file_path, sep=None, engine='python')
+                    except:
+                        df = pd.read_csv(file_path)
+                    fmt_name = "CSV"
+                else:
+                    df = pd.read_excel(file_path)
+                    fmt_name = "Excel"
+
+                # Metadata Info Bar
+                file_size = os.path.getsize(file_path)
+                size_str = f"{file_size/1024:.1f} KB" if file_size > 1024 else f"{file_size} bytes"
+                cols_meta = st.columns([3, 2, 2])
+                cols_meta[0].caption(f"📍 **Đường dẫn:** `{file_name}`")
+                cols_meta[1].caption(f"📏 **Kích thước:** `{size_str}`")
+                cols_meta[2].caption(f"📄 **Định dạng:** `{fmt_name}`")
+                st.divider()
+
+                st.dataframe(df, use_container_width=True, height=500)
+                
+                if st.button("Đóng", use_container_width=True, type="primary"):
+                    st.rerun()
+                return
+            except Exception as e:
+                st.error(f"❌ Lỗi khi xử lý bảng dữ liệu ({ext}): {e}")
+                return
+
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -143,7 +176,10 @@ def preview_source_dialog(file_name: str, raw_context: str = None):
     cols_meta = st.columns([3, 2, 2])
     cols_meta[0].caption(f"📍 **Đường dẫn:** `{file_name}`")
     cols_meta[1].caption(f"📏 **Kích thước:** `{size_str}`")
-    cols_meta[2].caption(f"📄 **Định dạng:** `Markdown`" if file_name.endswith('.md') else f"📄 **Định dạng:** `Text`")
+    
+    fmt_map = {'.md': 'Markdown', '.txt': 'Text', '.py': 'Python', '.pptx': 'PowerPoint', '.docx': 'Word'}
+    display_fmt = fmt_map.get(ext, 'Tài liệu')
+    cols_meta[2].caption(f"📄 **Định dạng:** `{display_fmt}`")
     
     st.divider()
     

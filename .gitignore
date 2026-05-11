@@ -1,9 +1,10 @@
 # Môi trường ảo (Ngốn vài GB rác)
 venv/
 env/
+data/
 # File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
 .env
-.antigravity/
+.antigravity
 GEMINI.md
 # Database nội bộ và Cache
 storage/

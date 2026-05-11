@@ -22,7 +22,12 @@ Every user query must traverse these stages in sequence:
 7.  **Generator:** Groq `LLaMA 3.3-70B`. Sử dụng **API đồng bộ (Synchronous)** để đảm bảo độ tin cậy của việc theo dõi Token Usage trên LangSmith. BẮT BUỘC trình bày dữ liệu có tính chất liệt kê/thuộc tính dưới dạng **BẢNG Markdown chuẩn**. TUYỆT ĐỐI KHÔNG dùng thẻ HTML (`<div>`, `<table>`) trong output. Trả lời thẳng vào vấn đề, không mào đầu máy móc. Bắt buộc thừa nhận nếu thông tin kỹ thuật bị thiếu.
 
 ### 2. Ingestion & Chunking Logic
--   **Multi-format Parsing:** Use `LightweightDocumentParser` (pymupdf4llm, python-docx, python-pptx) to rapidly process PDF, DOCX, and PPTX files without heavy OCR models, preserving Markdown table structures for accurate chunking.
+-   **Multi-format Parsing:** Use `LightweightDocumentParser` (5 formats: PDF, DOCX, PPTX, XLSX, XLS) without heavy OCR models:
+    -   **PDF:** `pymupdf4llm` fast pass + `pdfplumber` table-enrichment pass (triggered when table density ≥ 15% of page content).
+    -   **DOCX:** `python-docx` paragraphs & tables → Markdown headers + Markdown tables.
+    -   **PPTX:** `python-pptx` slide text extraction.
+    -   **Excel (.xlsx/.xls):** `openpyxl` — each sheet → `## SheetName` section with full Markdown table.
+-   **Backward Compatibility:** All output conforms to Markdown table format recognized by `smart_markdown_chunker`'s `is_markdown_table()` regex.
 -   **Split Point:** Split on `##` sections only. Keep `###` subsections within their parent chunk to preserve semantic context.
 -   **Enrichment:** Prepend the section title to every sub-chunk to ensure each is self-contained.
 -   **Table Safety:** Use `smart_markdown_chunker` to prevent splitting inside Markdown tables.
@@ -34,9 +39,9 @@ Every user query must traverse these stages in sequence:
 
 ### 1. Technical Stack
 -   **Compute:** Python 3.11+, FastAPI (Backend), Streamlit (Frontend).
--   **Storage:** Qdrant (Vectors), MinIO (S3-compatible .md/pdf/docx/pptx storage).
+-   **Storage:** Qdrant (Vectors), MinIO (S3-compatible storage: .md/.txt/.pdf/.docx/.pptx/.xlsx/.xls).
 -   **Models:** LLaMA 3.3-70B (Groq), Cohere Rerank, Vietnamese_Embedding (Sentence-Transformers).
--   **Parsing:** `pymupdf4llm` (PDF), `python-docx`, `python-pptx` (Lightweight Document Parser).
+-   **Parsing:** `pymupdf4llm` + `pdfplumber` (PDF/tables), `python-docx` (DOCX), `python-pptx` (PPTX), `openpyxl` (Excel).
 -   **Tracing:** Every pipeline component must use `@traceable` for LangSmith observability.
 
 ### 2. Performance & Resource Profiling

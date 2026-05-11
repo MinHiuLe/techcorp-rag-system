@@ -20,3 +20,6 @@ slowapi
 pymupdf4llm
 python-docx
 python-pptx
+openpyxl
+pdfplumber
+pandas
