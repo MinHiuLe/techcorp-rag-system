@@ -124,9 +124,14 @@ class Generator:
             max_tokens=max_output_tokens,
         )
 
-        # ── LangSmith metadata ────────────────────────────────────────────────
+        # ── LangSmith usage metadata ──────────────────────────────────────────
         run = get_current_run_tree()
         if run and hasattr(response, "usage") and response.usage:
+            usage_metadata = {
+                "input_tokens": response.usage.prompt_tokens,
+                "output_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            }
             run.add_metadata({
                 "ls_provider": "groq",
                 "ls_model_type": "chat",
@@ -134,10 +139,12 @@ class Generator:
                 "ls_prompt_tokens":      response.usage.prompt_tokens,
                 "ls_completion_tokens":  response.usage.completion_tokens,
                 "ls_total_tokens":       response.usage.total_tokens,
+                "usage_metadata": usage_metadata,
                 "complexity":         complexity,
                 "prompt_tier":        prompt_tier,
                 "max_output_tokens":  max_output_tokens,
             })
+            run.add_outputs({"usage_metadata": usage_metadata})
 
         metadata = {}
         if hasattr(response, "usage") and response.usage:

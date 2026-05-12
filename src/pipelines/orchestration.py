@@ -18,6 +18,7 @@ from src.retrieval.reranker import RerankPolicyEngine
 from src.retrieval.cache import MultiStageCache
 from src.utils.text_utils import clean_text
 from src.utils.redis_memory import RedisMemory
+from src.utils.pii_scrubber import scrub
 
 IS_EVAL_MODE = os.getenv("EVAL_MODE", "false").lower() == "true"
 logger = logging.getLogger(__name__)
@@ -424,112 +425,22 @@ CÂU HỎI GỐC: {query}"""
     @traceable(run_type="chain", name="RAG_Streaming_Pipeline")
     def process_with_context_stream(self, raw_query: str, session_id: str = "default"):
         """
-        Streaming version of process_with_context.
-        Yields: (chunk_text, final_context)
-        Note: final_context is only available after the first few steps, 
-        so we yield (None, context) first, then (chunk, context) for the rest.
+        Safe streaming adapter around process_with_context.
+        The sync pipeline remains the source of truth for LangSmith token
+        usage, generation-cache writes, and Redis memory.
         """
-        try:
-            query = clean_text(raw_query)
-            if self._is_injection(query):
-                yield self._INJECTION_RESPONSE[0], ""
-                return
+        result = self.process_with_context(raw_query, session_id=session_id)
+        answer = result.get("answer", "")
+        context = result.get("context", "")
+        scrubbed = scrub(answer)
+        if scrubbed.hits > 0:
+            logger.warning("[PII] %d match(es) scrubbed | session=%s", scrubbed.hits, session_id)
+        answer = scrubbed.text
 
-            try:
-                history_str = self._get_formatted_history(session_id)
-            except Exception:
-                history_str = "Không có."
-
-            analysis = self.analyzer.analyze(query, history_str)
-            profile = ResourceProfile.from_complexity(
-                analysis.complexity_score, 
-                n_topics=3 if self._is_multi_topic(query, analysis) else 1
-            )
-
-            # Stage 1 & 2: Cache Read
-            query_embedding = None
-            if not IS_EVAL_MODE and analysis.intent != "general":
-                try:
-                    query_embedding = self.cache.get_embedding(query)
-                    if query_embedding is None:
-                        query_embedding = self.dense_model.encode(query).tolist()
-                        self.cache.store_embedding(query, query_embedding)
-                        
-                    cached_answer = self.cache.check_generation(
-                        query_embedding, 
-                        min_tier=profile.tier
-                    )
-                    if cached_answer:
-                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
-                        yield cached_answer, "⚡ Pre-Retrieval Cache Hit"
-                        return
-                except Exception as e:
-                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache Read: {e}")
-
-            if analysis.intent == "general":
-                final_context = ""
-                stream = self.generator.stream_generate(
-                    original_query    = query,
-                    context           = "",
-                    complexity        = profile.complexity,
-                    prompt_tier       = "GENERAL",
-                    max_output_tokens = profile.max_output_tokens,
-                )
-            else:
-                strategy, fetch_k = RetrievalStrategyEngine.get_strategy(analysis)
-                
-                # Retrieval (Simplified for brevity, following the logic of process_with_context)
-                if self._is_multi_topic(query, analysis):
-                    sub_queries = self._decompose_query(query)
-                    docs_per_sq = [self.retriever.search(sq, strategy, 10) for sq in sub_queries]
-                    raw_docs = self._merge_docs(docs_per_sq)
-                else:
-                    search_query = self.rewriter.rewrite(query, analysis, history_str) if not profile.skip_rewrite else query
-                    raw_docs = self.retriever.search(search_query, strategy, fetch_k)
-
-                ranked_docs = self.policy.apply_policy(query, raw_docs, analysis, top_k_override=profile.rerank_top_k)
-                final_context = ContextBuilder.build(ranked_docs, profile=profile)
-
-                if not final_context:
-                    yield "Xin lỗi, tôi không tìm thấy thông tin liên quan trong tài liệu nội bộ.", ""
-                    return
-
-                stream = self.generator.stream_generate(
-                    original_query    = query,
-                    context           = final_context,
-                    complexity        = profile.complexity,
-                    prompt_tier       = profile.prompt_tier,
-                    max_output_tokens = profile.max_output_tokens,
-                )
-
-            full_answer = ""
-            for chunk in stream:
-                full_answer += chunk
-                yield chunk, final_context
-
-            # Save to Cache & Memory after stream ends
-            if not IS_EVAL_MODE and full_answer and analysis.intent != "general" and query_embedding:
-                try:
-                    self.cache.store_generation(
-                        query           = query, 
-                        query_embedding = query_embedding, 
-                        answer          = full_answer, 
-                        context         = final_context,
-                        complexity      = profile.complexity,
-                        tier            = profile.tier
-                    )
-                except Exception as e:
-                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache write failed: {e}")
-
-            try:
-                self.memory.add_message(session_id, query, full_answer)
-            except Exception: pass
-
-        except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            yield "Đã xảy ra lỗi trong quá trình xử lý luồng dữ liệu.", ""
-
-
+        chunk_size = 48
+        for start in range(0, len(answer), chunk_size):
+            yield answer[start:start + chunk_size], context
+        return
 
     def process(self, raw_query: str, session_id: str = "default") -> str:
         result = self.process_with_context(raw_query, session_id)

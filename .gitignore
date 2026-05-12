@@ -3,11 +3,11 @@ venv/
 env/
 # Dữ liệu và Tri thức nội bộ (Chỉ lưu ở Local/MinIO)
 data/
-docs/knowledge/
+docs/
 
 # File Mandates và Cấu hình (Bảo mật)
-.antigravity
-GEMINI.md
+AGENTS.md
+skills/
 
 # File chứa API Keys (TUYỆT ĐỐI KHÔNG PUSH)
 .env

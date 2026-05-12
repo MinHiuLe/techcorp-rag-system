@@ -193,10 +193,12 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
 
     start_time = time.time()
     try:
-        answer, context = rag_engine.process_with_context(
+        result = rag_engine.process_with_context(
             chat_request.query, 
             session_id=chat_request.session_id
         )
+        answer = result.get("answer", "")
+        context = result.get("context", "")
         
         # Detect maintenance messages from engine to return 503 instead of 200
         maintenance_keywords = [

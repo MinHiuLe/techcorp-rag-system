@@ -19,9 +19,11 @@ st.set_page_config(
 )
 
 api_url_env = os.getenv("API_URL", "")
-default_base = api_url_env.replace("/chat", "") if api_url_env else "http://api:8000"
+api_base_env = os.getenv("API_BASE_URL", "")
 
-API_BASE_URL = os.getenv("API_BASE_URL", default_base)
+API_BASE_URL = (api_url_env or api_base_env or "http://api:8000").rstrip("/")
+if API_BASE_URL.endswith("/chat"):
+    API_BASE_URL = API_BASE_URL[:-5]
 CHAT_URL     = f"{API_BASE_URL}/chat"
 CHAT_STREAM_URL = f"{API_BASE_URL}/chat/stream"
 FEEDBACK_URL = f"{API_BASE_URL}/chat/feedback"

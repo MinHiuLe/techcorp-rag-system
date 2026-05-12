@@ -38,6 +38,12 @@ services:
       - MINIO_ACCESS_KEY=hieule
       - MINIO_SECRET_KEY=hieule123
       - REDIS_URL=redis://redis:6379/0
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-TechCorp-RAG-Prod}
+      - LANGSMITH_TRACING=${LANGCHAIN_TRACING_V2:-true}
+      - LANGSMITH_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGSMITH_PROJECT=${LANGCHAIN_PROJECT:-TechCorp-RAG-Prod}
     volumes:
       - ./storage:/app/storage
       - ./.env:/app/.env
