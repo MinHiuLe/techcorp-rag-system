@@ -1,0 +1,37 @@
+[
+  {
+    "id": "cache_hit",
+    "label": "Cache hit",
+    "query": "Cho mình xin địa chỉ server VPN của công ty với?",
+    "expected_route": "cache_hit",
+    "expected_intent": "technical"
+  },
+  {
+    "id": "cache_miss_without_rewrite",
+    "label": "Cache miss without rewrite",
+    "query": "Cho mình xin địa chỉ server VPN của công ty với?",
+    "expected_route": "technical_single_topic",
+    "expected_intent": "technical"
+  },
+  {
+    "id": "cache_miss_with_rewrite",
+    "label": "Cache miss with rewrite",
+    "query": "Mình mới onboard, cần xin quyền Jira thì quy trình cấp quyền như thế nào?",
+    "expected_route": "technical_single_topic",
+    "expected_intent": "technical"
+  },
+  {
+    "id": "multi_topic",
+    "label": "Multi-topic",
+    "query": "Mình cần cài VPN trên máy mới thì làm thế nào? Cài Docker thì cần các bước gì?",
+    "expected_route": "technical_multi_topic",
+    "expected_intent": "technical"
+  },
+  {
+    "id": "general_intent",
+    "label": "General intent",
+    "query": "Chào bạn, bạn có thể hỗ trợ mình những gì?",
+    "expected_route": "general",
+    "expected_intent": "general"
+  }
+]

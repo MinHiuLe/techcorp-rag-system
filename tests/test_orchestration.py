@@ -1,22 +1,21 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+from tests.dependency_stubs import install_runtime_stubs
+
+install_runtime_stubs()
+
 from src.pipelines.orchestration import ProductionRAG
 from src.schemas import QueryAnalysis
 
 class TestOrchestration(unittest.TestCase):
-    @patch("src.pipelines.orchestration.QdrantClient")
-    @patch("src.pipelines.orchestration.SentenceTransformer")
-    @patch("src.pipelines.orchestration.SparseTextEmbedding")
-    @patch("src.pipelines.orchestration.cohere.Client")
-    @patch("src.pipelines.orchestration.Groq")
-    @patch("src.pipelines.orchestration.GeminiRotatorClient")
-    def setUp(self, mock_gemini, mock_groq, mock_cohere, mock_sparse, mock_dense, mock_qdrant):
-        self.rag = ProductionRAG()
+    def setUp(self):
+        self.rag = ProductionRAG.__new__(ProductionRAG)
+        self.rag.memory = MagicMock()
 
     def test_clear_memory(self):
-        self.rag.session_memories = {"session_1": [{"user": "hi", "bot": "hello"}]}
         self.rag.clear_memory("session_1")
-        self.assertEqual(self.rag.session_memories["session_1"], [])
+        self.rag.memory.clear.assert_called_once_with("session_1")
 
     def test_is_multi_topic(self):
         a_low = QueryAnalysis(intent="technical", complexity_score=0.2, ambiguity_score=0.1, entities=[])

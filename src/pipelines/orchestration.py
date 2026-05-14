@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import logging
 import cohere
 from qdrant_client import QdrantClient
@@ -21,7 +22,24 @@ from src.utils.redis_memory import RedisMemory
 from src.utils.pii_scrubber import scrub
 
 IS_EVAL_MODE = os.getenv("EVAL_MODE", "false").lower() == "true"
+RAG_TIMING_LOGS = os.getenv("RAG_TIMING_LOGS", "true").lower() == "true"
 logger = logging.getLogger(__name__)
+
+
+def _empty_timings() -> dict:
+    return {
+        "analyzer_ms": 0.0,
+        "cache_lookup_ms": 0.0,
+        "rewrite_ms": 0.0,
+        "retrieval_ms": 0.0,
+        "rerank_ms": 0.0,
+        "generation_ms": 0.0,
+        "total_ms": 0.0,
+    }
+
+
+def _elapsed_ms(start: float) -> float:
+    return round((time.perf_counter() - start) * 1000, 2)
 
 
 class ProductionRAG:
@@ -190,9 +208,50 @@ CÂU HỎI GỐC: {query}"""
 
     @traceable(run_type="chain", name="RAG_Core_Pipeline")
     def process_with_context(self, raw_query: str, session_id: str = "default") -> dict:
-        import time
         start_time = time.time()
-        metadata = {"tokens": {"total": 0, "prompt": 0, "completion": 0}}
+        perf_start = time.perf_counter()
+        timings = _empty_timings()
+        debug = {
+            "intent": None,
+            "cache_hit": False,
+            "rewrite_attempted": False,
+            "rewrite_used": False,
+            "is_multi_topic": False,
+            "route": "unknown",
+            "top_k": None,
+            "model_name": settings.LLM_MODEL,
+        }
+        metadata = {
+            "tokens": {"total": 0, "prompt": 0, "completion": 0},
+            "timings_ms": timings,
+            "debug": debug,
+        }
+
+        def finish_metadata(route: str | None = None) -> dict:
+            if route:
+                debug["route"] = route
+            timings["total_ms"] = _elapsed_ms(perf_start)
+            metadata["latency"] = time.time() - start_time
+            metadata["timings_ms"] = timings
+            metadata["debug"] = debug
+            metadata["cache_hit"] = debug["cache_hit"]
+            if RAG_TIMING_LOGS:
+                logger.info(
+                    "[RAG_TIMING] session=%s route=%s intent=%s cache_hit=%s "
+                    "rewrite_attempted=%s rewrite_used=%s is_multi_topic=%s "
+                    "top_k=%s model=%s timings=%s",
+                    session_id,
+                    debug["route"],
+                    debug["intent"],
+                    debug["cache_hit"],
+                    debug["rewrite_attempted"],
+                    debug["rewrite_used"],
+                    debug["is_multi_topic"],
+                    debug["top_k"],
+                    debug["model_name"],
+                    timings,
+                )
+            return metadata
         
         try:
             query       = clean_text(raw_query)
@@ -201,7 +260,7 @@ CÂU HỎI GỐC: {query}"""
                 return {
                     "answer": self._INJECTION_RESPONSE[0],
                     "context": "",
-                    "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                    "metadata": finish_metadata("guardrail")
                 }
 
             # --- REDIS GRACEFUL DEGRADATION ---
@@ -214,14 +273,17 @@ CÂU HỎI GỐC: {query}"""
                 history_len = 0
 
             # ── Query Analysis & Resource Profiling ───────────────
+            stage_start = time.perf_counter()
             try:
                 analysis = self.analyzer.analyze(query, history_str)
+                timings["analyzer_ms"] = _elapsed_ms(stage_start)
             except Exception as e:
+                timings["analyzer_ms"] = _elapsed_ms(stage_start)
                 logger.error(f"[GROQ_ERROR] Analysis failed: {e}")
                 return {
                     "answer": "Hệ thống hiện đang quá tải hoặc gặp sự cố kết nối với AI Model (Groq). Vui lòng thử lại sau vài giây.",
                     "context": "",
-                    "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                    "metadata": finish_metadata("analysis_error")
                 }
             
             # ── TOKEN AUDIT ──────────────────────────────────────
@@ -232,12 +294,47 @@ CÂU HỎI GỐC: {query}"""
             )
 
             # ── ResourceProfile: single source of truth ──────────
+            is_multi = self._is_multi_topic(query, analysis)
             profile = ResourceProfile.from_complexity(
                 analysis.complexity_score, 
-                n_topics=3 if self._is_multi_topic(query, analysis) else 1
+                n_topics=3 if is_multi else 1
             )
+            debug.update({
+                "intent": analysis.intent,
+                "is_multi_topic": is_multi,
+                "top_k": profile.rerank_top_k,
+            })
+
+            if analysis.intent == "general":
+                debug["route"] = "general"
+                stage_start = time.perf_counter()
+                try:
+                    final_answer, gen_meta = self.generator.generate(
+                        original_query    = query,
+                        context           = "",
+                        complexity        = profile.complexity,
+                        prompt_tier       = "GENERAL",
+                        max_output_tokens = profile.max_output_tokens,
+                    )
+                    metadata["tokens"] = gen_meta
+                except Exception as e:
+                    logger.error(f"[GROQ_ERROR] Generation failed: {e}")
+                    final_answer = "Xin chĂ o! TĂ´i lĂ  há»‡ thá»‘ng AI ná»™i bá»™ TechCorp."
+                timings["generation_ms"] = _elapsed_ms(stage_start)
+
+                try:
+                    self.memory.add_message(session_id, query, final_answer)
+                except Exception as e:
+                    logger.error(f"[REDIS_ERROR] Failed to save message: {e}")
+
+                return {
+                    "answer": final_answer,
+                    "context": "",
+                    "metadata": finish_metadata()
+                }
 
             # Stage 1 — try embedding cache
+            stage_start = time.perf_counter()
             try:
                 query_embedding = self.cache.get_embedding(query)
             except Exception as e:
@@ -259,16 +356,22 @@ CÂU HỎI GỐC: {query}"""
                         min_tier=profile.tier
                     )
                     if cached_answer:
+                        timings["cache_lookup_ms"] = _elapsed_ms(stage_start)
+                        debug["cache_hit"] = True
                         logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
                         return {
                             "answer": cached_answer,
                             "context": "⚡ Pre-Retrieval Cache Hit",
-                            "metadata": {"latency": time.time() - start_time, "tokens": {}, "cache_hit": True}
+                            "metadata": finish_metadata("cache_hit")
                         }
                 except Exception as e:
                     logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
 
+            timings["cache_lookup_ms"] = _elapsed_ms(stage_start)
+
             if analysis.intent == "general":
+                debug["route"] = "general"
+                stage_start = time.perf_counter()
                 try:
                     final_answer, gen_meta = self.generator.generate(
                         original_query    = query,
@@ -281,14 +384,16 @@ CÂU HỎI GỐC: {query}"""
                 except Exception as e:
                     logger.error(f"[GROQ_ERROR] Generation failed: {e}")
                     final_answer = "Xin chào! Tôi là hệ thống AI nội bộ TechCorp."
+                timings["generation_ms"] = _elapsed_ms(stage_start)
                 final_context = ""
 
             else:
                 strategy, fetch_k = RetrievalStrategyEngine.get_strategy(analysis)
-                is_multi          = self._is_multi_topic(query, analysis)
 
                 # ── MULTI-TOPIC PATH ──────────────────────────────────────────────
                 if is_multi:
+                    debug["route"] = "technical_multi_topic"
+                    stage_start = time.perf_counter()
                     try:
                         sub_queries = self._decompose_query(query)
                         n_topics    = len(sub_queries)
@@ -306,21 +411,26 @@ CÂU HỎI GỐC: {query}"""
                             docs_per_sq.append(sq_docs)
 
                         raw_docs = self._merge_docs(docs_per_sq)
+                        timings["retrieval_ms"] = _elapsed_ms(stage_start)
                     except Exception as e:
+                        timings["retrieval_ms"] = _elapsed_ms(stage_start)
                         logger.error(f"[QDRANT_ERROR] Multi-topic search failed: {e}")
                         return {
                             "answer": "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
                             "context": "",
-                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                            "metadata": finish_metadata("retrieval_error")
                         }
 
 
                 # ── SINGLE-TOPIC PATH ─────────────────────────────────────────────
                 else:
+                    debug["route"] = "technical_single_topic"
                     n_topics = 1
                     if profile.skip_rewrite:
                         search_query = query
                     else:
+                        debug["rewrite_attempted"] = True
+                        stage_start = time.perf_counter()
                         try:
                             search_query = self.cache.get_rewrite(query)
                         except Exception:
@@ -336,25 +446,34 @@ CÂU HỎI GỐC: {query}"""
                         else:
                             logger.info(f"  [RewriteCache] HIT → '{search_query[:60]}'")
 
+                    timings["rewrite_ms"] = _elapsed_ms(stage_start) if not profile.skip_rewrite else 0.0
+                    debug["rewrite_used"] = bool(search_query and search_query.strip() != query.strip())
+
+                    stage_start = time.perf_counter()
                     try:
                         raw_docs = self.retriever.search(search_query, strategy, fetch_k)
+                        timings["retrieval_ms"] = _elapsed_ms(stage_start)
                     except Exception as e:
+                        timings["retrieval_ms"] = _elapsed_ms(stage_start)
                         logger.error(f"[QDRANT_ERROR] Search failed: {e}")
                         return {
                             "answer": "Hệ thống tìm kiếm (Qdrant) hiện đang gặp sự cố. Chúng tôi đang tiến hành bảo trì hạ tầng dữ liệu.",
                             "context": "",
-                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                            "metadata": finish_metadata("retrieval_error")
                         }
 
 
                 # ── Rerank ────────────────────────────────────────────────────────
+                stage_start = time.perf_counter()
                 try:
                     ranked_docs = self.policy.apply_policy(
                         query, raw_docs, analysis,
                         n_topics=n_topics,
                         top_k_override=profile.rerank_top_k,
                     )
+                    timings["rerank_ms"] = _elapsed_ms(stage_start)
                 except Exception as e:
+                    timings["rerank_ms"] = _elapsed_ms(stage_start)
                     logger.error(f"[COHERE_ERROR] Rerank failed: {e}")
                     ranked_docs = raw_docs[:3] # Fallback to raw
 
@@ -372,6 +491,7 @@ CÂU HỎI GỐC: {query}"""
                         "Tôi chỉ có thể hỗ trợ các vấn đề về IT, HR và Sales."
                     )
                 else:
+                    stage_start = time.perf_counter()
                     try:
                         final_answer, gen_meta = self.generator.generate(
                             original_query    = query,
@@ -381,12 +501,14 @@ CÂU HỎI GỐC: {query}"""
                             max_output_tokens = profile.max_output_tokens,
                         )
                         metadata["tokens"] = gen_meta
+                        timings["generation_ms"] = _elapsed_ms(stage_start)
                     except Exception as e:
+                        timings["generation_ms"] = _elapsed_ms(stage_start)
                         logger.error(f"[GROQ_ERROR] Generation failed: {e}")
                         return {
                             "answer": "Hệ thống hiện đang gặp sự cố khi tạo câu trả lời. Vui lòng thử lại sau.",
                             "context": "",
-                            "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                            "metadata": finish_metadata("generation_error")
                         }
 
             # ── Cache Write & Memory ──────────────────────────────────────────────
@@ -407,11 +529,10 @@ CÂU HỎI GỐC: {query}"""
             except Exception as e:
                 logger.error(f"[REDIS_ERROR] Failed to save message: {e}")
 
-            metadata["latency"] = time.time() - start_time
             return {
                 "answer": final_answer,
                 "context": final_context,
-                "metadata": metadata
+                "metadata": finish_metadata()
             }
 
         except Exception as e:
@@ -419,7 +540,7 @@ CÂU HỎI GỐC: {query}"""
             return {
                 "answer": "Đã xảy ra lỗi hệ thống nghiêm trọng. Chúng tôi đã ghi nhận sự cố.",
                 "context": "",
-                "metadata": {"latency": time.time() - start_time, "tokens": {}}
+                "metadata": finish_metadata("critical_error")
             }
 
     @traceable(run_type="chain", name="RAG_Streaming_Pipeline")
