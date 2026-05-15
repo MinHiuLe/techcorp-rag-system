@@ -24,6 +24,8 @@ class _FakeRAG:
                 "tokens": {"total_tokens": 3},
                 "timings_ms": {
                     "analyzer_ms": 1.0,
+                    "embedding_ms": 0.5,
+                    "generation_cache_check_ms": 1.5,
                     "cache_lookup_ms": 2.0,
                     "rewrite_ms": 0.0,
                     "retrieval_ms": 3.0,
@@ -37,6 +39,7 @@ class _FakeRAG:
                     "cache_hit": query == "vpn" and not is_warmup,
                     "rewrite_attempted": False,
                     "rewrite_used": False,
+                    "rewrite_source": "skip",
                     "is_multi_topic": False,
                     "top_k": 2,
                     "model_name": "test-model",
@@ -79,6 +82,7 @@ class TestLatencyBenchmark(unittest.TestCase):
         self.assertEqual(result["expected_route"], "cache_hit")
         self.assertEqual(result["actual_route"], "cache_hit")
         self.assertTrue(result["cache_hit"])
+        self.assertEqual(result["rewrite_source"], "skip")
         self.assertIn("timings_ms", result)
         self.assertIn("wall_ms", result)
         self.assertEqual(result["status"], "ok")
@@ -140,6 +144,7 @@ class TestLatencyBenchmark(unittest.TestCase):
         self.assertEqual(summary["runs"], 2)
         self.assertIn("avg", summary["wall_ms"])
         self.assertIn("p95", summary["timings_ms"]["total_ms"])
+        self.assertEqual(summary["rewrite_sources"], {"skip": 2})
 
     def test_single_run_wrapper_preserves_list_shape(self):
         fake = _FakeRAG()
@@ -171,6 +176,16 @@ class TestLatencyBenchmark(unittest.TestCase):
 
         self.assertEqual(sleeps, [1.5])
 
+    def test_negative_delay_rejected_for_single_run(self):
+        queries = [{"id": "one", "label": "One", "query": "hello"}]
+
+        with self.assertRaises(ValueError):
+            latency_benchmark.run_benchmark(
+                queries,
+                rag_factory=_FakeRAG,
+                delay_seconds=-1.0,
+            )
+
     def test_delay_between_repeated_run_blocks(self):
         fake = _FakeRAG()
         sleeps = []
@@ -193,6 +208,17 @@ class TestLatencyBenchmark(unittest.TestCase):
         )
 
         self.assertEqual(sleeps, [2.0, 2.0])
+
+    def test_negative_delay_rejected_for_repeated_runs(self):
+        queries = [{"id": "one", "label": "One", "query": "hello"}]
+
+        with self.assertRaises(ValueError):
+            latency_benchmark.run_benchmark_repeated(
+                queries,
+                runs=2,
+                rag_factory=_FakeRAG,
+                delay_seconds=-1.0,
+            )
 
 
 if __name__ == "__main__":

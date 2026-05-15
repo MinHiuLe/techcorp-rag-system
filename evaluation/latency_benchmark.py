@@ -63,6 +63,7 @@ def _measure_query(rag, scenario: dict, session_id: str) -> dict:
         "cache_hit": bool(debug.get("cache_hit", metadata.get("cache_hit", False))),
         "rewrite_attempted": bool(debug.get("rewrite_attempted", False)),
         "rewrite_used": bool(debug.get("rewrite_used", False)),
+        "rewrite_source": debug.get("rewrite_source"),
         "is_multi_topic": bool(debug.get("is_multi_topic", False)),
         "top_k": debug.get("top_k"),
         "model_name": debug.get("model_name"),
@@ -115,6 +116,7 @@ def run_benchmark(
                 "cache_hit": False,
                 "rewrite_attempted": False,
                 "rewrite_used": False,
+                "rewrite_source": None,
                 "is_multi_topic": False,
                 "top_k": None,
                 "model_name": None,
@@ -171,6 +173,10 @@ def summarize_results(results: list[dict]) -> list[dict]:
         }
 
         first = items[0]
+        rewrite_sources = {}
+        for item in items:
+            source = item.get("rewrite_source") or "unknown"
+            rewrite_sources[source] = rewrite_sources.get(source, 0) + 1
         summary.append({
             "id": scenario_id,
             "label": first.get("label"),
@@ -178,6 +184,7 @@ def summarize_results(results: list[dict]) -> list[dict]:
             "expected_route": first.get("expected_route"),
             "expected_intent": first.get("expected_intent"),
             "runs": len(items),
+            "rewrite_sources": rewrite_sources,
             "wall_ms": _stats([float(item.get("wall_ms", 0.0)) for item in items]),
             "timings_ms": timings,
         })
@@ -243,6 +250,7 @@ def run_benchmark_repeated(
                     "cache_hit": False,
                     "rewrite_attempted": False,
                     "rewrite_used": False,
+                    "rewrite_source": None,
                     "is_multi_topic": False,
                     "top_k": None,
                     "model_name": None,

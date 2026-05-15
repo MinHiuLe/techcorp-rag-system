@@ -16,24 +16,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 605.54,
+        "analyzer_ms": 323.93,
         "embedding_ms": 0.04,
-        "generation_cache_check_ms": 5.07,
-        "cache_lookup_ms": 5.12,
+        "generation_cache_check_ms": 5.24,
+        "cache_lookup_ms": 5.29,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
         "generation_ms": 0.0,
-        "total_ms": 611.64
+        "total_ms": 329.87
       },
-      "wall_ms": 612.54,
+      "wall_ms": 330.53,
       "tokens": {
         "total": 0,
         "prompt": 0,
         "completion": 0
       },
       "context_present": true,
-      "answer_preview": "Địa chỉ server VPN của công ty là: vpn.techcorp.com",
+      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
       "status": "ok",
       "run": 1
     },
@@ -53,17 +53,17 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 893.32,
-        "embedding_ms": 296.98,
-        "generation_cache_check_ms": 10.51,
-        "cache_lookup_ms": 307.51,
+        "analyzer_ms": 426.61,
+        "embedding_ms": 266.48,
+        "generation_cache_check_ms": 11.34,
+        "cache_lookup_ms": 277.84,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 287.8,
-        "rerank_ms": 933.65,
-        "generation_ms": 281.35,
-        "total_ms": 2718.36
+        "retrieval_ms": 288.45,
+        "rerank_ms": 552.97,
+        "generation_ms": 387.32,
+        "total_ms": 1945.19
       },
-      "wall_ms": 2720.81,
+      "wall_ms": 1950.46,
       "tokens": {
         "prompt_tokens": 428,
         "completion_tokens": 16,
@@ -90,24 +90,24 @@
       "top_k": 4,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 542.16,
-        "embedding_ms": 315.04,
-        "generation_cache_check_ms": 9.66,
-        "cache_lookup_ms": 324.73,
-        "rewrite_ms": 723.16,
-        "retrieval_ms": 309.03,
-        "rerank_ms": 483.14,
-        "generation_ms": 1212.93,
-        "total_ms": 3609.02
+        "analyzer_ms": 568.32,
+        "embedding_ms": 354.9,
+        "generation_cache_check_ms": 16.83,
+        "cache_lookup_ms": 371.75,
+        "rewrite_ms": 671.19,
+        "retrieval_ms": 315.3,
+        "rerank_ms": 642.54,
+        "generation_ms": 1854.97,
+        "total_ms": 4437.85
       },
-      "wall_ms": 3611.08,
+      "wall_ms": 4443.05,
       "tokens": {
         "prompt_tokens": 1995,
-        "completion_tokens": 299,
-        "total_tokens": 2294
+        "completion_tokens": 381,
+        "total_tokens": 2376
       },
       "context_present": true,
-      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu - Project: IT-Access-Request - Issue Type: Access Request - Thông tin bắt buộc: - Họ tên - Email công ty - Project cần truy cập - Role mong muốn ",
+      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | IT-Access-Request | | Issue Type | Access Request | | Thông tin bắt buộc | Họ tên, Email công ty,",
       "status": "ok",
       "run": 1
     },
@@ -127,21 +127,21 @@
       "top_k": 10,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 586.48,
-        "embedding_ms": 296.87,
-        "generation_cache_check_ms": 8.38,
-        "cache_lookup_ms": 305.27,
+        "analyzer_ms": 563.46,
+        "embedding_ms": 464.92,
+        "generation_cache_check_ms": 9.61,
+        "cache_lookup_ms": 474.55,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 769.31,
-        "rerank_ms": 569.34,
-        "generation_ms": 1463.47,
-        "total_ms": 3697.4
+        "retrieval_ms": 850.56,
+        "rerank_ms": 499.12,
+        "generation_ms": 2951.67,
+        "total_ms": 5342.89
       },
-      "wall_ms": 3700.02,
+      "wall_ms": 5348.57,
       "tokens": {
-        "prompt_tokens": 3280,
-        "completion_tokens": 309,
-        "total_tokens": 3589
+        "prompt_tokens": 3085,
+        "completion_tokens": 435,
+        "total_tokens": 3520
       },
       "context_present": true,
       "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
@@ -164,24 +164,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 725.6,
+        "analyzer_ms": 393.98,
         "embedding_ms": 0.0,
         "generation_cache_check_ms": 0.0,
         "cache_lookup_ms": 0.0,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
-        "generation_ms": 639.95,
-        "total_ms": 1367.68
+        "generation_ms": 633.16,
+        "total_ms": 1029.3
       },
-      "wall_ms": 1369.85,
+      "wall_ms": 1035.48,
       "tokens": {
         "prompt_tokens": 140,
-        "completion_tokens": 95,
-        "total_tokens": 235
+        "completion_tokens": 94,
+        "total_tokens": 234
       },
       "context_present": false,
-      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, giúp với các tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi cụ thể về công việc hoặc cần hỗ trợ về một vấn đề nào đó,",
+      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, thực hiện tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi cụ thể về công việc hoặc cần hỗ trợ về một vấn đề nào đó, hã",
       "status": "ok",
       "run": 1
     },
@@ -201,24 +201,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 292.63,
-        "embedding_ms": 0.07,
-        "generation_cache_check_ms": 6.71,
-        "cache_lookup_ms": 6.79,
+        "analyzer_ms": 291.97,
+        "embedding_ms": 0.03,
+        "generation_cache_check_ms": 6.56,
+        "cache_lookup_ms": 6.6,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
         "generation_ms": 0.0,
-        "total_ms": 300.08
+        "total_ms": 299.27
       },
-      "wall_ms": 300.77,
+      "wall_ms": 300.13,
       "tokens": {
         "total": 0,
         "prompt": 0,
         "completion": 0
       },
       "context_present": true,
-      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
+      "answer_preview": "Địa chỉ server VPN của công ty là: vpn.techcorp.com",
       "status": "ok",
       "run": 2
     },
@@ -238,17 +238,17 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 428.57,
-        "embedding_ms": 302.99,
-        "generation_cache_check_ms": 7.47,
-        "cache_lookup_ms": 310.47,
+        "analyzer_ms": 400.75,
+        "embedding_ms": 276.51,
+        "generation_cache_check_ms": 9.32,
+        "cache_lookup_ms": 285.85,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 289.51,
-        "rerank_ms": 563.72,
-        "generation_ms": 503.06,
-        "total_ms": 2108.81
+        "retrieval_ms": 307.34,
+        "rerank_ms": 552.58,
+        "generation_ms": 968.63,
+        "total_ms": 2526.27
       },
-      "wall_ms": 2111.24,
+      "wall_ms": 2530.72,
       "tokens": {
         "prompt_tokens": 428,
         "completion_tokens": 15,
@@ -275,211 +275,26 @@
       "top_k": 4,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 586.89,
-        "embedding_ms": 293.67,
-        "generation_cache_check_ms": 9.24,
-        "cache_lookup_ms": 302.93,
-        "rewrite_ms": 629.6,
-        "retrieval_ms": 346.53,
-        "rerank_ms": 492.42,
-        "generation_ms": 1193.81,
-        "total_ms": 3564.94
+        "analyzer_ms": 556.74,
+        "embedding_ms": 314.05,
+        "generation_cache_check_ms": 17.37,
+        "cache_lookup_ms": 331.44,
+        "rewrite_ms": 460.57,
+        "retrieval_ms": 370.95,
+        "rerank_ms": 470.25,
+        "generation_ms": 1880.72,
+        "total_ms": 4082.69
       },
-      "wall_ms": 3566.7,
-      "tokens": {
-        "prompt_tokens": 1941,
-        "completion_tokens": 312,
-        "total_tokens": 2253
-      },
-      "context_present": true,
-      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu Người dùng tạo ticket trên Jira Service Management: - Project: IT-Access-Request - Issue Type: Access Request - Thông tin bắt buộc: - Họ tên - Em",
-      "status": "ok",
-      "run": 2
-    },
-    {
-      "id": "multi_topic",
-      "label": "Multi-topic",
-      "query": "Mình cần cài VPN trên máy mới thì làm thế nào? Cài Docker thì cần các bước gì?",
-      "expected_route": "technical_multi_topic",
-      "expected_intent": "technical",
-      "actual_route": "technical_multi_topic",
-      "actual_intent": "technical",
-      "cache_hit": false,
-      "rewrite_attempted": false,
-      "rewrite_used": false,
-      "rewrite_source": "skip",
-      "is_multi_topic": true,
-      "top_k": 10,
-      "model_name": "llama-3.3-70b-versatile",
-      "timings_ms": {
-        "analyzer_ms": 633.67,
-        "embedding_ms": 337.99,
-        "generation_cache_check_ms": 9.72,
-        "cache_lookup_ms": 347.73,
-        "rewrite_ms": 0.0,
-        "retrieval_ms": 928.57,
-        "rerank_ms": 549.61,
-        "generation_ms": 1614.9,
-        "total_ms": 4077.89
-      },
-      "wall_ms": 4081.66,
-      "tokens": {
-        "prompt_tokens": 3085,
-        "completion_tokens": 411,
-        "total_tokens": 3496
-      },
-      "context_present": true,
-      "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
-      "status": "ok",
-      "run": 2
-    },
-    {
-      "id": "general_intent",
-      "label": "General intent",
-      "query": "Chào bạn, bạn có thể hỗ trợ mình những gì?",
-      "expected_route": "general",
-      "expected_intent": "general",
-      "actual_route": "general",
-      "actual_intent": "general",
-      "cache_hit": false,
-      "rewrite_attempted": false,
-      "rewrite_used": false,
-      "rewrite_source": "skip",
-      "is_multi_topic": false,
-      "top_k": 2,
-      "model_name": "llama-3.3-70b-versatile",
-      "timings_ms": {
-        "analyzer_ms": 425.45,
-        "embedding_ms": 0.0,
-        "generation_cache_check_ms": 0.0,
-        "cache_lookup_ms": 0.0,
-        "rewrite_ms": 0.0,
-        "retrieval_ms": 0.0,
-        "rerank_ms": 0.0,
-        "generation_ms": 539.65,
-        "total_ms": 969.86
-      },
-      "wall_ms": 976.38,
-      "tokens": {
-        "prompt_tokens": 140,
-        "completion_tokens": 100,
-        "total_tokens": 240
-      },
-      "context_present": false,
-      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, thực hiện tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi liên quan đến công việc hoặc cần hỗ trợ về một vấn đề cụ thể",
-      "status": "ok",
-      "run": 2
-    },
-    {
-      "id": "cache_hit",
-      "label": "Cache hit",
-      "query": "Cho mình xin địa chỉ server VPN của công ty với?",
-      "expected_route": "cache_hit",
-      "expected_intent": "technical",
-      "actual_route": "cache_hit",
-      "actual_intent": "technical",
-      "cache_hit": true,
-      "rewrite_attempted": false,
-      "rewrite_used": false,
-      "rewrite_source": "skip",
-      "is_multi_topic": false,
-      "top_k": 2,
-      "model_name": "llama-3.3-70b-versatile",
-      "timings_ms": {
-        "analyzer_ms": 308.72,
-        "embedding_ms": 0.03,
-        "generation_cache_check_ms": 5.35,
-        "cache_lookup_ms": 5.39,
-        "rewrite_ms": 0.0,
-        "retrieval_ms": 0.0,
-        "rerank_ms": 0.0,
-        "generation_ms": 0.0,
-        "total_ms": 314.95
-      },
-      "wall_ms": 315.59,
-      "tokens": {
-        "total": 0,
-        "prompt": 0,
-        "completion": 0
-      },
-      "context_present": true,
-      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
-      "status": "ok",
-      "run": 3
-    },
-    {
-      "id": "cache_miss_without_rewrite",
-      "label": "Cache miss without rewrite",
-      "query": "Cho mình xin địa chỉ server VPN của công ty với?",
-      "expected_route": "technical_single_topic",
-      "expected_intent": "technical",
-      "actual_route": "technical_single_topic",
-      "actual_intent": "technical",
-      "cache_hit": false,
-      "rewrite_attempted": false,
-      "rewrite_used": false,
-      "rewrite_source": "skip",
-      "is_multi_topic": false,
-      "top_k": 2,
-      "model_name": "llama-3.3-70b-versatile",
-      "timings_ms": {
-        "analyzer_ms": 680.85,
-        "embedding_ms": 289.98,
-        "generation_cache_check_ms": 9.11,
-        "cache_lookup_ms": 299.1,
-        "rewrite_ms": 0.0,
-        "retrieval_ms": 321.96,
-        "rerank_ms": 529.9,
-        "generation_ms": 406.49,
-        "total_ms": 2251.61
-      },
-      "wall_ms": 2255.06,
-      "tokens": {
-        "prompt_tokens": 428,
-        "completion_tokens": 16,
-        "total_tokens": 444
-      },
-      "context_present": true,
-      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
-      "status": "ok",
-      "run": 3
-    },
-    {
-      "id": "cache_miss_with_rewrite",
-      "label": "Cache miss with rewrite",
-      "query": "Mình mới onboard, cần xin quyền Jira thì quy trình cấp quyền như thế nào?",
-      "expected_route": "technical_single_topic",
-      "expected_intent": "technical",
-      "actual_route": "technical_single_topic",
-      "actual_intent": "technical",
-      "cache_hit": false,
-      "rewrite_attempted": true,
-      "rewrite_used": true,
-      "rewrite_source": "llm",
-      "is_multi_topic": false,
-      "top_k": 4,
-      "model_name": "llama-3.3-70b-versatile",
-      "timings_ms": {
-        "analyzer_ms": 941.39,
-        "embedding_ms": 296.31,
-        "generation_cache_check_ms": 11.89,
-        "cache_lookup_ms": 308.21,
-        "rewrite_ms": 393.92,
-        "retrieval_ms": 338.33,
-        "rerank_ms": 505.41,
-        "generation_ms": 1349.94,
-        "total_ms": 3850.14
-      },
-      "wall_ms": 3853.36,
+      "wall_ms": 4089.27,
       "tokens": {
         "prompt_tokens": 2043,
-        "completion_tokens": 397,
-        "total_tokens": 2440
+        "completion_tokens": 493,
+        "total_tokens": 2536
       },
       "context_present": true,
-      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | IT-Access-Request | | Issue Type | Access Request | | Họ tên | Tên của bạn | | Email công ty | Em",
+      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền được mô tả trong tài liệu `Quy_trinh_Cap_quyen_Jira.md`. Dưới đây là các bước trong quy trình cấp quyền: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | I",
       "status": "ok",
-      "run": 3
+      "run": 2
     },
     {
       "id": "multi_topic",
@@ -497,26 +312,26 @@
       "top_k": 10,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 680.75,
-        "embedding_ms": 332.28,
-        "generation_cache_check_ms": 8.12,
-        "cache_lookup_ms": 340.42,
+        "analyzer_ms": 828.2,
+        "embedding_ms": 314.72,
+        "generation_cache_check_ms": 10.85,
+        "cache_lookup_ms": 325.59,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 734.46,
-        "rerank_ms": 504.87,
-        "generation_ms": 1505.72,
-        "total_ms": 3769.63
+        "retrieval_ms": 837.82,
+        "rerank_ms": 571.43,
+        "generation_ms": 2341.99,
+        "total_ms": 4908.47
       },
-      "wall_ms": 3772.25,
+      "wall_ms": 4913.03,
       "tokens": {
         "prompt_tokens": 3085,
-        "completion_tokens": 387,
-        "total_tokens": 3472
+        "completion_tokens": 388,
+        "total_tokens": 3473
       },
       "context_present": true,
       "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
       "status": "ok",
-      "run": 3
+      "run": 2
     },
     {
       "id": "general_intent",
@@ -534,26 +349,26 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 467.69,
+        "analyzer_ms": 491.94,
         "embedding_ms": 0.0,
         "generation_cache_check_ms": 0.0,
         "cache_lookup_ms": 0.0,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
-        "generation_ms": 632.65,
-        "total_ms": 1102.26
+        "generation_ms": 630.08,
+        "total_ms": 1124.05
       },
-      "wall_ms": 1105.14,
+      "wall_ms": 1127.56,
       "tokens": {
         "prompt_tokens": 140,
-        "completion_tokens": 95,
-        "total_tokens": 235
+        "completion_tokens": 81,
+        "total_tokens": 221
       },
       "context_present": false,
-      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, giúp với các tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi cụ thể về công việc hoặc cần hỗ trợ về một vấn đề nào đó,",
+      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi giao tiếp thông thường, cung cấp kiến thức cơ bản và thực hiện các tính toán cơ bản. Nếu bạn có câu hỏi về công việc hoặc cần hỗ trợ cụ thể, vui lòng đặt câu hỏi cụ",
       "status": "ok",
-      "run": 3
+      "run": 2
     },
     {
       "id": "cache_hit",
@@ -571,17 +386,17 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 301.76,
-        "embedding_ms": 0.03,
-        "generation_cache_check_ms": 5.55,
-        "cache_lookup_ms": 5.58,
+        "analyzer_ms": 454.18,
+        "embedding_ms": 0.04,
+        "generation_cache_check_ms": 5.94,
+        "cache_lookup_ms": 5.99,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
         "generation_ms": 0.0,
-        "total_ms": 308.03
+        "total_ms": 461.1
       },
-      "wall_ms": 308.55,
+      "wall_ms": 461.99,
       "tokens": {
         "total": 0,
         "prompt": 0,
@@ -590,6 +405,191 @@
       "context_present": true,
       "answer_preview": "Địa chỉ server VPN của công ty là: vpn.techcorp.com",
       "status": "ok",
+      "run": 3
+    },
+    {
+      "id": "cache_miss_without_rewrite",
+      "label": "Cache miss without rewrite",
+      "query": "Cho mình xin địa chỉ server VPN của công ty với?",
+      "expected_route": "technical_single_topic",
+      "expected_intent": "technical",
+      "actual_route": "technical_single_topic",
+      "actual_intent": "technical",
+      "cache_hit": false,
+      "rewrite_attempted": false,
+      "rewrite_used": false,
+      "rewrite_source": "skip",
+      "is_multi_topic": false,
+      "top_k": 2,
+      "model_name": "llama-3.3-70b-versatile",
+      "timings_ms": {
+        "analyzer_ms": 454.11,
+        "embedding_ms": 285.27,
+        "generation_cache_check_ms": 19.45,
+        "cache_lookup_ms": 304.73,
+        "rewrite_ms": 0.0,
+        "retrieval_ms": 292.1,
+        "rerank_ms": 526.52,
+        "generation_ms": 281.44,
+        "total_ms": 1870.52
+      },
+      "wall_ms": 1875.69,
+      "tokens": {
+        "prompt_tokens": 428,
+        "completion_tokens": 16,
+        "total_tokens": 444
+      },
+      "context_present": true,
+      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
+      "status": "ok",
+      "run": 3
+    },
+    {
+      "id": "cache_miss_with_rewrite",
+      "label": "Cache miss with rewrite",
+      "query": "Mình mới onboard, cần xin quyền Jira thì quy trình cấp quyền như thế nào?",
+      "expected_route": "technical_single_topic",
+      "expected_intent": "technical",
+      "actual_route": "technical_single_topic",
+      "actual_intent": "technical",
+      "cache_hit": false,
+      "rewrite_attempted": true,
+      "rewrite_used": true,
+      "rewrite_source": "llm",
+      "is_multi_topic": false,
+      "top_k": 4,
+      "model_name": "llama-3.3-70b-versatile",
+      "timings_ms": {
+        "analyzer_ms": 682.78,
+        "embedding_ms": 286.46,
+        "generation_cache_check_ms": 12.32,
+        "cache_lookup_ms": 298.8,
+        "rewrite_ms": 731.18,
+        "retrieval_ms": 309.1,
+        "rerank_ms": 3162.42,
+        "generation_ms": 877.38,
+        "total_ms": 6074.97
+      },
+      "wall_ms": 6084.6,
+      "tokens": {
+        "prompt_tokens": 1908,
+        "completion_tokens": 259,
+        "total_tokens": 2167
+      },
+      "context_present": true,
+      "answer_preview": "Quy trình cấp quyền Jira như sau: ### Bước 1: Tạo yêu cầu Người dùng tạo ticket trên Jira Service Management: - Project: IT-Access-Request - Issue Type: Access Request - Thông tin bắt buộc: - Họ tên - Email công ty - Project cần truy cập - ",
+      "status": "ok",
+      "run": 3
+    },
+    {
+      "id": "multi_topic",
+      "label": "Multi-topic",
+      "query": "Mình cần cài VPN trên máy mới thì làm thế nào? Cài Docker thì cần các bước gì?",
+      "expected_route": "technical_multi_topic",
+      "expected_intent": "technical",
+      "actual_route": "technical_multi_topic",
+      "actual_intent": "technical",
+      "cache_hit": false,
+      "rewrite_attempted": false,
+      "rewrite_used": false,
+      "rewrite_source": "skip",
+      "is_multi_topic": true,
+      "top_k": 10,
+      "model_name": "llama-3.3-70b-versatile",
+      "timings_ms": {
+        "analyzer_ms": 550.36,
+        "embedding_ms": 324.6,
+        "generation_cache_check_ms": 15.14,
+        "cache_lookup_ms": 339.75,
+        "rewrite_ms": 0.0,
+        "retrieval_ms": 706.37,
+        "rerank_ms": 508.08,
+        "generation_ms": 2128.22,
+        "total_ms": 4236.38
+      },
+      "wall_ms": 4242.22,
+      "tokens": {
+        "prompt_tokens": 3085,
+        "completion_tokens": 334,
+        "total_tokens": 3419
+      },
+      "context_present": true,
+      "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
+      "status": "ok",
+      "run": 3
+    },
+    {
+      "id": "general_intent",
+      "label": "General intent",
+      "query": "Chào bạn, bạn có thể hỗ trợ mình những gì?",
+      "expected_route": "general",
+      "expected_intent": "general",
+      "actual_route": "general",
+      "actual_intent": "general",
+      "cache_hit": false,
+      "rewrite_attempted": false,
+      "rewrite_used": false,
+      "rewrite_source": "skip",
+      "is_multi_topic": false,
+      "top_k": 2,
+      "model_name": "llama-3.3-70b-versatile",
+      "timings_ms": {
+        "analyzer_ms": 428.76,
+        "embedding_ms": 0.0,
+        "generation_cache_check_ms": 0.0,
+        "cache_lookup_ms": 0.0,
+        "rewrite_ms": 0.0,
+        "retrieval_ms": 0.0,
+        "rerank_ms": 0.0,
+        "generation_ms": 693.08,
+        "total_ms": 1124.3
+      },
+      "wall_ms": 1131.4,
+      "tokens": {
+        "prompt_tokens": 140,
+        "completion_tokens": 100,
+        "total_tokens": 240
+      },
+      "context_present": false,
+      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, thực hiện tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi liên quan đến công việc hoặc cần hỗ trợ về một vấn đề cụ thể",
+      "status": "ok",
+      "run": 3
+    },
+    {
+      "id": "cache_hit",
+      "label": "Cache hit",
+      "query": "Cho mình xin địa chỉ server VPN của công ty với?",
+      "expected_route": "cache_hit",
+      "expected_intent": "technical",
+      "actual_route": "cache_hit",
+      "actual_intent": "technical",
+      "cache_hit": true,
+      "rewrite_attempted": false,
+      "rewrite_used": false,
+      "rewrite_source": "skip",
+      "is_multi_topic": false,
+      "top_k": 2,
+      "model_name": "llama-3.3-70b-versatile",
+      "timings_ms": {
+        "analyzer_ms": 331.99,
+        "embedding_ms": 0.03,
+        "generation_cache_check_ms": 6.22,
+        "cache_lookup_ms": 6.26,
+        "rewrite_ms": 0.0,
+        "retrieval_ms": 0.0,
+        "rerank_ms": 0.0,
+        "generation_ms": 0.0,
+        "total_ms": 338.83
+      },
+      "wall_ms": 339.39,
+      "tokens": {
+        "total": 0,
+        "prompt": 0,
+        "completion": 0
+      },
+      "context_present": true,
+      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
+      "status": "ok",
       "run": 4
     },
     {
@@ -608,17 +608,17 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 418.18,
-        "embedding_ms": 274.68,
-        "generation_cache_check_ms": 9.13,
-        "cache_lookup_ms": 283.82,
+        "analyzer_ms": 412.48,
+        "embedding_ms": 292.22,
+        "generation_cache_check_ms": 8.68,
+        "cache_lookup_ms": 300.92,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 300.73,
-        "rerank_ms": 492.5,
-        "generation_ms": 617.02,
-        "total_ms": 2124.37
+        "retrieval_ms": 285.6,
+        "rerank_ms": 543.41,
+        "generation_ms": 437.48,
+        "total_ms": 1991.67
       },
-      "wall_ms": 2128.1,
+      "wall_ms": 1997.4,
       "tokens": {
         "prompt_tokens": 428,
         "completion_tokens": 16,
@@ -639,30 +639,30 @@
       "actual_intent": "technical",
       "cache_hit": false,
       "rewrite_attempted": true,
-      "rewrite_used": false,
+      "rewrite_used": true,
       "rewrite_source": "llm",
       "is_multi_topic": false,
       "top_k": 4,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 550.27,
-        "embedding_ms": 313.87,
-        "generation_cache_check_ms": 11.44,
-        "cache_lookup_ms": 325.34,
-        "rewrite_ms": 526.28,
-        "retrieval_ms": 296.38,
-        "rerank_ms": 530.07,
-        "generation_ms": 2478.27,
-        "total_ms": 4719.95
+        "analyzer_ms": 570.54,
+        "embedding_ms": 1444.32,
+        "generation_cache_check_ms": 18.99,
+        "cache_lookup_ms": 1463.33,
+        "rewrite_ms": 406.64,
+        "retrieval_ms": 325.36,
+        "rerank_ms": 495.9,
+        "generation_ms": 1412.64,
+        "total_ms": 4690.2
       },
-      "wall_ms": 4722.79,
+      "wall_ms": 4697.19,
       "tokens": {
-        "prompt_tokens": 1995,
-        "completion_tokens": 456,
-        "total_tokens": 2451
+        "prompt_tokens": 1908,
+        "completion_tokens": 358,
+        "total_tokens": 2266
       },
       "context_present": true,
-      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu | Thông tin bắt buộc | Mô tả | | --- | --- | | Họ tên | Tên đầy đủ của bạn | | Email công ty | Địa chỉ email công ty của bạn | | Project cần truy",
+      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền sau: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | IT-Access-Request | | Issue Type | Access Request | | Thông tin bắt buộc | Họ tên, Email công ty, Pro",
       "status": "ok",
       "run": 4
     },
@@ -682,21 +682,21 @@
       "top_k": 10,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 615.6,
-        "embedding_ms": 306.1,
-        "generation_cache_check_ms": 7.14,
-        "cache_lookup_ms": 313.25,
+        "analyzer_ms": 543.22,
+        "embedding_ms": 311.61,
+        "generation_cache_check_ms": 8.48,
+        "cache_lookup_ms": 320.11,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 746.54,
-        "rerank_ms": 513.89,
-        "generation_ms": 3721.97,
-        "total_ms": 5914.29
+        "retrieval_ms": 737.62,
+        "rerank_ms": 548.32,
+        "generation_ms": 1534.13,
+        "total_ms": 3686.39
       },
-      "wall_ms": 5916.72,
+      "wall_ms": 3693.48,
       "tokens": {
         "prompt_tokens": 3085,
-        "completion_tokens": 334,
-        "total_tokens": 3419
+        "completion_tokens": 411,
+        "total_tokens": 3496
       },
       "context_present": true,
       "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
@@ -719,24 +719,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 403.27,
+        "analyzer_ms": 521.89,
         "embedding_ms": 0.0,
         "generation_cache_check_ms": 0.0,
         "cache_lookup_ms": 0.0,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
-        "generation_ms": 499.46,
-        "total_ms": 905.26
+        "generation_ms": 560.38,
+        "total_ms": 1084.1
       },
-      "wall_ms": 908.51,
+      "wall_ms": 1090.1,
       "tokens": {
         "prompt_tokens": 140,
-        "completion_tokens": 94,
-        "total_tokens": 234
+        "completion_tokens": 95,
+        "total_tokens": 235
       },
       "context_present": false,
-      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, thực hiện tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi cụ thể về công việc hoặc cần hỗ trợ về một vấn đề nào đó, hã",
+      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, giúp với các tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi cụ thể về công việc hoặc cần hỗ trợ về một vấn đề nào đó,",
       "status": "ok",
       "run": 4
     },
@@ -756,24 +756,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 319.93,
-        "embedding_ms": 0.03,
-        "generation_cache_check_ms": 5.5,
-        "cache_lookup_ms": 5.53,
+        "analyzer_ms": 291.75,
+        "embedding_ms": 0.04,
+        "generation_cache_check_ms": 6.28,
+        "cache_lookup_ms": 6.33,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
         "generation_ms": 0.0,
-        "total_ms": 326.31
+        "total_ms": 298.68
       },
-      "wall_ms": 326.91,
+      "wall_ms": 299.2,
       "tokens": {
         "total": 0,
         "prompt": 0,
         "completion": 0
       },
       "context_present": true,
-      "answer_preview": "Địa chỉ server VPN của công ty là `vpn.techcorp.com`.",
+      "answer_preview": "Địa chỉ server VPN của công ty là: vpn.techcorp.com",
       "status": "ok",
       "run": 5
     },
@@ -793,17 +793,17 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 547.9,
-        "embedding_ms": 296.13,
-        "generation_cache_check_ms": 9.71,
-        "cache_lookup_ms": 305.85,
+        "analyzer_ms": 444.29,
+        "embedding_ms": 284.9,
+        "generation_cache_check_ms": 12.58,
+        "cache_lookup_ms": 297.5,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 329.72,
-        "rerank_ms": 529.16,
-        "generation_ms": 402.88,
-        "total_ms": 2139.04
+        "retrieval_ms": 306.23,
+        "rerank_ms": 554.53,
+        "generation_ms": 285.4,
+        "total_ms": 1900.89
       },
-      "wall_ms": 2141.93,
+      "wall_ms": 1907.28,
       "tokens": {
         "prompt_tokens": 428,
         "completion_tokens": 16,
@@ -824,30 +824,30 @@
       "actual_intent": "technical",
       "cache_hit": false,
       "rewrite_attempted": true,
-      "rewrite_used": true,
+      "rewrite_used": false,
       "rewrite_source": "llm",
       "is_multi_topic": false,
       "top_k": 4,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 771.31,
-        "embedding_ms": 534.93,
-        "generation_cache_check_ms": 19.68,
-        "cache_lookup_ms": 554.65,
-        "rewrite_ms": 744.0,
-        "retrieval_ms": 509.13,
-        "rerank_ms": 1610.21,
-        "generation_ms": 2839.82,
-        "total_ms": 7045.99
+        "analyzer_ms": 575.48,
+        "embedding_ms": 291.56,
+        "generation_cache_check_ms": 12.99,
+        "cache_lookup_ms": 304.56,
+        "rewrite_ms": 762.36,
+        "retrieval_ms": 318.11,
+        "rerank_ms": 492.82,
+        "generation_ms": 1567.68,
+        "total_ms": 4034.61
       },
-      "wall_ms": 7051.04,
+      "wall_ms": 4041.47,
       "tokens": {
         "prompt_tokens": 1995,
-        "completion_tokens": 497,
-        "total_tokens": 2492
+        "completion_tokens": 408,
+        "total_tokens": 2403
       },
       "context_present": true,
-      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền như sau: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | IT-Access-Request | | Issue Type | Access Request | | Họ tên | Tên của bạn | | Email công ty | Em",
+      "answer_preview": "Để xin quyền Jira, bạn cần thực hiện theo quy trình cấp quyền sau: ### Bước 1: Tạo yêu cầu | Thông tin | Mô tả | | --- | --- | | Project | IT-Access-Request | | Issue Type | Access Request | | Thông tin bắt buộc | Họ tên, Email công ty, Pro",
       "status": "ok",
       "run": 5
     },
@@ -867,21 +867,21 @@
       "top_k": 10,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 838.14,
-        "embedding_ms": 338.28,
-        "generation_cache_check_ms": 1137.75,
-        "cache_lookup_ms": 1476.05,
+        "analyzer_ms": 566.48,
+        "embedding_ms": 295.82,
+        "generation_cache_check_ms": 11.82,
+        "cache_lookup_ms": 307.66,
         "rewrite_ms": 0.0,
-        "retrieval_ms": 1256.16,
-        "rerank_ms": 568.74,
-        "generation_ms": 1271.72,
-        "total_ms": 5415.43
+        "retrieval_ms": 755.28,
+        "rerank_ms": 3821.61,
+        "generation_ms": 2272.32,
+        "total_ms": 7726.48
       },
-      "wall_ms": 5418.44,
+      "wall_ms": 7734.37,
       "tokens": {
-        "prompt_tokens": 3280,
-        "completion_tokens": 316,
-        "total_tokens": 3596
+        "prompt_tokens": 3085,
+        "completion_tokens": 402,
+        "total_tokens": 3487
       },
       "context_present": true,
       "answer_preview": "Để cài VPN trên máy mới, bạn cần thực hiện các bước sau: | Bước | Hành động | Ghi chú | | --- | --- | --- | | 1 | Truy cập cổng nội bộ: `https://it-portal.techcorp.local/downloads` | Sử dụng tài khoản công ty | | 2 | Chọn mục **VPN Clients*",
@@ -904,24 +904,24 @@
       "top_k": 2,
       "model_name": "llama-3.3-70b-versatile",
       "timings_ms": {
-        "analyzer_ms": 402.14,
+        "analyzer_ms": 464.16,
         "embedding_ms": 0.0,
         "generation_cache_check_ms": 0.0,
         "cache_lookup_ms": 0.0,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
         "rerank_ms": 0.0,
-        "generation_ms": 899.01,
-        "total_ms": 1303.42
+        "generation_ms": 885.07,
+        "total_ms": 1350.99
       },
-      "wall_ms": 1307.72,
+      "wall_ms": 1356.78,
       "tokens": {
         "prompt_tokens": 140,
-        "completion_tokens": 112,
-        "total_tokens": 252
+        "completion_tokens": 84,
+        "total_tokens": 224
       },
       "context_present": false,
-      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, giúp bạn với các tính toán đơn giản, và cung cấp thông tin về các chủ đề khác nhau. Nếu bạn có câu hỏi liên quan đến công việc hoặc cần hỗ trợ về một vấn đề",
+      "answer_preview": "Chào bạn! Tôi có thể hỗ trợ bạn về các thông tin chung, trả lời các câu hỏi cơ bản, thực hiện tính toán đơn giản, và giúp bạn tìm kiếm thông tin. Nếu bạn có câu hỏi về công việc hoặc cần hỗ trợ cụ thể, vui lòng cho tôi biết chi tiết để tôi ",
       "status": "ok",
       "run": 5
     }
@@ -938,40 +938,40 @@
         "skip": 5
       },
       "wall_ms": {
-        "avg": 372.87,
-        "min": 300.77,
-        "max": 612.54,
-        "p50": 315.59,
-        "p95": 612.54
+        "avg": 346.25,
+        "min": 299.2,
+        "max": 461.99,
+        "p50": 330.53,
+        "p95": 461.99
       },
       "timings_ms": {
         "analyzer_ms": {
-          "avg": 365.72,
-          "min": 292.63,
-          "max": 605.54,
-          "p50": 308.72,
-          "p95": 605.54
+          "avg": 338.76,
+          "min": 291.75,
+          "max": 454.18,
+          "p50": 323.93,
+          "p95": 454.18
         },
         "cache_lookup_ms": {
-          "avg": 5.68,
-          "min": 5.12,
-          "max": 6.79,
-          "p50": 5.53,
-          "p95": 6.79
+          "avg": 6.09,
+          "min": 5.29,
+          "max": 6.6,
+          "p50": 6.26,
+          "p95": 6.6
         },
         "embedding_ms": {
           "avg": 0.04,
           "min": 0.03,
-          "max": 0.07,
-          "p50": 0.03,
-          "p95": 0.07
+          "max": 0.04,
+          "p50": 0.04,
+          "p95": 0.04
         },
         "generation_cache_check_ms": {
-          "avg": 5.64,
-          "min": 5.07,
-          "max": 6.71,
-          "p50": 5.5,
-          "p95": 6.71
+          "avg": 6.05,
+          "min": 5.24,
+          "max": 6.56,
+          "p50": 6.22,
+          "p95": 6.56
         },
         "generation_ms": {
           "avg": 0.0,
@@ -1002,11 +1002,11 @@
           "p95": 0.0
         },
         "total_ms": {
-          "avg": 372.2,
-          "min": 300.08,
-          "max": 611.64,
-          "p50": 314.95,
-          "p95": 611.64
+          "avg": 345.55,
+          "min": 298.68,
+          "max": 461.1,
+          "p50": 329.87,
+          "p95": 461.1
         }
       }
     },
@@ -1021,61 +1021,61 @@
         "skip": 5
       },
       "wall_ms": {
-        "avg": 2271.43,
-        "min": 2111.24,
-        "max": 2720.81,
-        "p50": 2141.93,
-        "p95": 2720.81
+        "avg": 2052.31,
+        "min": 1875.69,
+        "max": 2530.72,
+        "p50": 1950.46,
+        "p95": 2530.72
       },
       "timings_ms": {
         "analyzer_ms": {
-          "avg": 593.76,
-          "min": 418.18,
-          "max": 893.32,
-          "p50": 547.9,
-          "p95": 893.32
+          "avg": 427.65,
+          "min": 400.75,
+          "max": 454.11,
+          "p50": 426.61,
+          "p95": 454.11
         },
         "cache_lookup_ms": {
-          "avg": 301.35,
-          "min": 283.82,
-          "max": 310.47,
-          "p50": 305.85,
-          "p95": 310.47
+          "avg": 293.37,
+          "min": 277.84,
+          "max": 304.73,
+          "p50": 297.5,
+          "p95": 304.73
         },
         "embedding_ms": {
-          "avg": 292.15,
-          "min": 274.68,
-          "max": 302.99,
-          "p50": 296.13,
-          "p95": 302.99
+          "avg": 281.08,
+          "min": 266.48,
+          "max": 292.22,
+          "p50": 284.9,
+          "p95": 292.22
         },
         "generation_cache_check_ms": {
-          "avg": 9.19,
-          "min": 7.47,
-          "max": 10.51,
-          "p50": 9.13,
-          "p95": 10.51
+          "avg": 12.27,
+          "min": 8.68,
+          "max": 19.45,
+          "p50": 11.34,
+          "p95": 19.45
         },
         "generation_ms": {
-          "avg": 442.16,
-          "min": 281.35,
-          "max": 617.02,
-          "p50": 406.49,
-          "p95": 617.02
+          "avg": 472.05,
+          "min": 281.44,
+          "max": 968.63,
+          "p50": 387.32,
+          "p95": 968.63
         },
         "rerank_ms": {
-          "avg": 609.79,
-          "min": 492.5,
-          "max": 933.65,
-          "p50": 529.9,
-          "p95": 933.65
+          "avg": 546.0,
+          "min": 526.52,
+          "max": 554.53,
+          "p50": 552.58,
+          "p95": 554.53
         },
         "retrieval_ms": {
-          "avg": 305.94,
-          "min": 287.8,
-          "max": 329.72,
-          "p50": 300.73,
-          "p95": 329.72
+          "avg": 295.94,
+          "min": 285.6,
+          "max": 307.34,
+          "p50": 292.1,
+          "p95": 307.34
         },
         "rewrite_ms": {
           "avg": 0.0,
@@ -1085,11 +1085,11 @@
           "p95": 0.0
         },
         "total_ms": {
-          "avg": 2268.44,
-          "min": 2108.81,
-          "max": 2718.36,
-          "p50": 2139.04,
-          "p95": 2718.36
+          "avg": 2046.91,
+          "min": 1870.52,
+          "max": 2526.27,
+          "p50": 1945.19,
+          "p95": 2526.27
         }
       }
     },
@@ -1104,75 +1104,75 @@
         "llm": 5
       },
       "wall_ms": {
-        "avg": 4560.99,
-        "min": 3566.7,
-        "max": 7051.04,
-        "p50": 3853.36,
-        "p95": 7051.04
+        "avg": 4671.12,
+        "min": 4041.47,
+        "max": 6084.6,
+        "p50": 4443.05,
+        "p95": 6084.6
       },
       "timings_ms": {
         "analyzer_ms": {
-          "avg": 678.4,
-          "min": 542.16,
-          "max": 941.39,
-          "p50": 586.89,
-          "p95": 941.39
+          "avg": 590.77,
+          "min": 556.74,
+          "max": 682.78,
+          "p50": 570.54,
+          "p95": 682.78
         },
         "cache_lookup_ms": {
-          "avg": 363.17,
-          "min": 302.93,
-          "max": 554.65,
-          "p50": 324.73,
-          "p95": 554.65
+          "avg": 553.98,
+          "min": 298.8,
+          "max": 1463.33,
+          "p50": 331.44,
+          "p95": 1463.33
         },
         "embedding_ms": {
-          "avg": 350.76,
-          "min": 293.67,
-          "max": 534.93,
-          "p50": 313.87,
-          "p95": 534.93
+          "avg": 538.26,
+          "min": 286.46,
+          "max": 1444.32,
+          "p50": 314.05,
+          "p95": 1444.32
         },
         "generation_cache_check_ms": {
-          "avg": 12.38,
-          "min": 9.24,
-          "max": 19.68,
-          "p50": 11.44,
-          "p95": 19.68
+          "avg": 15.7,
+          "min": 12.32,
+          "max": 18.99,
+          "p50": 16.83,
+          "p95": 18.99
         },
         "generation_ms": {
-          "avg": 1814.95,
-          "min": 1193.81,
-          "max": 2839.82,
-          "p50": 1349.94,
-          "p95": 2839.82
+          "avg": 1518.68,
+          "min": 877.38,
+          "max": 1880.72,
+          "p50": 1567.68,
+          "p95": 1880.72
         },
         "rerank_ms": {
-          "avg": 724.25,
-          "min": 483.14,
-          "max": 1610.21,
-          "p50": 505.41,
-          "p95": 1610.21
+          "avg": 1052.79,
+          "min": 470.25,
+          "max": 3162.42,
+          "p50": 495.9,
+          "p95": 3162.42
         },
         "retrieval_ms": {
-          "avg": 359.88,
-          "min": 296.38,
-          "max": 509.13,
-          "p50": 338.33,
-          "p95": 509.13
+          "avg": 327.76,
+          "min": 309.1,
+          "max": 370.95,
+          "p50": 318.11,
+          "p95": 370.95
         },
         "rewrite_ms": {
-          "avg": 603.39,
-          "min": 393.92,
-          "max": 744.0,
-          "p50": 629.6,
-          "p95": 744.0
+          "avg": 606.39,
+          "min": 406.64,
+          "max": 762.36,
+          "p50": 671.19,
+          "p95": 762.36
         },
         "total_ms": {
-          "avg": 4558.01,
-          "min": 3564.94,
-          "max": 7045.99,
-          "p50": 3850.14,
-          "p95": 7045.99
+          "avg": 4664.06,
+          "min": 4034.61,
+          "max": 6074.97,
+          "p50": 4437.85,
+          "p95": 6074.97
         }
       }
     },
@@ -1187,61 +1187,61 @@
         "skip": 5
       },
       "wall_ms": {
-        "avg": 4577.82,
-        "min": 3700.02,
-        "max": 5916.72,
-        "p50": 4081.66,
-        "p95": 5916.72
+        "avg": 5186.33,
+        "min": 3693.48,
+        "max": 7734.37,
+        "p50": 4913.03,
+        "p95": 7734.37
       },
       "timings_ms": {
         "analyzer_ms": {
-          "avg": 670.93,
-          "min": 586.48,
-          "max": 838.14,
-          "p50": 633.67,
-          "p95": 838.14
+          "avg": 610.34,
+          "min": 543.22,
+          "max": 828.2,
+          "p50": 563.46,
+          "p95": 828.2
         },
         "cache_lookup_ms": {
-          "avg": 556.54,
-          "min": 305.27,
-          "max": 1476.05,
-          "p50": 340.42,
-          "p95": 1476.05
+          "avg": 353.53,
+          "min": 307.66,
+          "max": 474.55,
+          "p50": 325.59,
+          "p95": 474.55
         },
         "embedding_ms": {
-          "avg": 322.3,
-          "min": 296.87,
-          "max": 338.28,
-          "p50": 332.28,
-          "p95": 338.28
+          "avg": 342.33,
+          "min": 295.82,
+          "max": 464.92,
+          "p50": 314.72,
+          "p95": 464.92
         },
         "generation_cache_check_ms": {
-          "avg": 234.22,
-          "min": 7.14,
-          "max": 1137.75,
-          "p50": 8.38,
-          "p95": 1137.75
+          "avg": 11.18,
+          "min": 8.48,
+          "max": 15.14,
+          "p50": 10.85,
+          "p95": 15.14
         },
         "generation_ms": {
-          "avg": 1915.56,
-          "min": 1271.72,
-          "max": 3721.97,
-          "p50": 1505.72,
-          "p95": 3721.97
+          "avg": 2245.67,
+          "min": 1534.13,
+          "max": 2951.67,
+          "p50": 2272.32,
+          "p95": 2951.67
         },
         "rerank_ms": {
-          "avg": 541.29,
-          "min": 504.87,
-          "max": 569.34,
-          "p50": 549.61,
-          "p95": 569.34
+          "avg": 1189.71,
+          "min": 499.12,
+          "max": 3821.61,
+          "p50": 548.32,
+          "p95": 3821.61
         },
         "retrieval_ms": {
-          "avg": 887.01,
-          "min": 734.46,
-          "max": 1256.16,
-          "p50": 769.31,
-          "p95": 1256.16
+          "avg": 777.53,
+          "min": 706.37,
+          "max": 850.56,
+          "p50": 755.28,
+          "p95": 850.56
         },
         "rewrite_ms": {
           "avg": 0.0,
@@ -1251,11 +1251,11 @@
           "p95": 0.0
         },
         "total_ms": {
-          "avg": 4574.93,
-          "min": 3697.4,
-          "max": 5914.29,
-          "p50": 4077.89,
-          "p95": 5914.29
+          "avg": 5180.12,
+          "min": 3686.39,
+          "max": 7726.48,
+          "p50": 4908.47,
+          "p95": 7726.48
         }
       }
     },
@@ -1270,19 +1270,19 @@
         "skip": 5
       },
       "wall_ms": {
-        "avg": 1133.52,
-        "min": 908.51,
-        "max": 1369.85,
-        "p50": 1105.14,
-        "p95": 1369.85
+        "avg": 1148.26,
+        "min": 1035.48,
+        "max": 1356.78,
+        "p50": 1127.56,
+        "p95": 1356.78
       },
       "timings_ms": {
         "analyzer_ms": {
-          "avg": 484.83,
-          "min": 402.14,
-          "max": 725.6,
-          "p50": 425.45,
-          "p95": 725.6
+          "avg": 460.15,
+          "min": 393.98,
+          "max": 521.89,
+          "p50": 464.16,
+          "p95": 521.89
         },
         "cache_lookup_ms": {
           "avg": 0.0,
@@ -1306,11 +1306,11 @@
           "p95": 0.0
         },
         "generation_ms": {
-          "avg": 642.14,
-          "min": 499.46,
-          "max": 899.01,
-          "p50": 632.65,
-          "p95": 899.01
+          "avg": 680.35,
+          "min": 560.38,
+          "max": 885.07,
+          "p50": 633.16,
+          "p95": 885.07
         },
         "rerank_ms": {
           "avg": 0.0,
@@ -1334,11 +1334,11 @@
           "p95": 0.0
         },
         "total_ms": {
-          "avg": 1129.7,
-          "min": 905.26,
-          "max": 1367.68,
-          "p50": 1102.26,
-          "p95": 1367.68
+          "avg": 1142.55,
+          "min": 1029.3,
+          "max": 1350.99,
+          "p50": 1124.05,
+          "p95": 1350.99
         }
       }
     }

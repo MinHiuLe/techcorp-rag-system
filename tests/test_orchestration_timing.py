@@ -59,16 +59,24 @@ class _Cache:
         return None
 
 
+class _CacheWithGenerationError(_Cache):
+    def check_generation(self, query_embedding, min_tier):
+        raise RuntimeError("generation cache failed")
+
+
 class TestOrchestrationTiming(unittest.TestCase):
-    def _rag(self, analysis, cached_answer=None, rewritten=None, rewrite_return=None):
+    def _rag(self, analysis, cached_answer=None, rewritten=None, rewrite_return=None, rewrite_error=None, cache=None):
         rag = ProductionRAG.__new__(ProductionRAG)
         rag.memory = _Memory()
-        rag.cache = _Cache(cached_answer=cached_answer, rewritten=rewritten)
+        rag.cache = cache or _Cache(cached_answer=cached_answer, rewritten=rewritten)
         rag.dense_model = _DenseModel()
         rag.analyzer = MagicMock()
         rag.analyzer.analyze.return_value = analysis
         rag.rewriter = MagicMock()
-        rag.rewriter.rewrite.return_value = rewrite_return if rewrite_return is not None else rewritten or "rewritten query"
+        if rewrite_error is not None:
+            rag.rewriter.rewrite.side_effect = rewrite_error
+        else:
+            rag.rewriter.rewrite.return_value = rewrite_return if rewrite_return is not None else rewritten or "rewritten query"
         rag.retriever = MagicMock()
         rag.retriever.search.return_value = [{"text": "context text", "source": "source.md"}]
         rag.retriever.search_with_vec.return_value = [{"text": "context text", "source": "source.md"}]
@@ -91,6 +99,10 @@ class TestOrchestrationTiming(unittest.TestCase):
         self.assertTrue(metadata["debug"]["cache_hit"])
         self.assertEqual(metadata["debug"]["route"], "cache_hit")
         self.assertIn("cache_lookup_ms", metadata["timings_ms"])
+        self.assertIn("embedding_ms", metadata["timings_ms"])
+        self.assertIn("generation_cache_check_ms", metadata["timings_ms"])
+        self.assertGreaterEqual(metadata["timings_ms"]["embedding_ms"], 0.0)
+        self.assertGreaterEqual(metadata["timings_ms"]["generation_cache_check_ms"], 0.0)
         rag.retriever.search.assert_not_called()
         rag.generator.generate.assert_not_called()
 
@@ -98,15 +110,17 @@ class TestOrchestrationTiming(unittest.TestCase):
         analysis = QueryAnalysis(intent="technical", complexity_score=0.2, ambiguity_score=0.1, entities=[])
         rag = self._rag(analysis)
 
-        metadata = self._metadata(rag)
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag)
 
         self.assertFalse(metadata["debug"]["cache_hit"])
         self.assertFalse(metadata["debug"]["rewrite_attempted"])
         self.assertFalse(metadata["debug"]["rewrite_used"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "skip")
         self.assertEqual(metadata["debug"]["route"], "technical_single_topic")
         self.assertEqual(metadata["debug"]["top_k"], 2)
 
-    def test_cache_miss_with_rewrite_metadata(self):
+    def test_cache_miss_with_rewrite_cache_hit_metadata(self):
         analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
         rag = self._rag(analysis, rewritten="rewritten vpn setup")
 
@@ -114,9 +128,21 @@ class TestOrchestrationTiming(unittest.TestCase):
 
         self.assertTrue(metadata["debug"]["rewrite_attempted"])
         self.assertTrue(metadata["debug"]["rewrite_used"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "cache_hit")
         self.assertEqual(metadata["debug"]["route"], "technical_single_topic")
         self.assertGreaterEqual(metadata["timings_ms"]["rewrite_ms"], 0.0)
         rag.retriever.search.assert_called_once()
+
+    def test_cache_miss_with_llm_rewrite_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        rag = self._rag(analysis, rewrite_return="rewritten vpn setup")
+
+        metadata = self._metadata(rag)
+
+        self.assertTrue(metadata["debug"]["rewrite_attempted"])
+        self.assertTrue(metadata["debug"]["rewrite_used"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "llm")
+        rag.rewriter.rewrite.assert_called_once()
 
     def test_rewrite_attempted_without_rewrite_used_metadata(self):
         analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
@@ -127,15 +153,98 @@ class TestOrchestrationTiming(unittest.TestCase):
 
         self.assertTrue(metadata["debug"]["rewrite_attempted"])
         self.assertFalse(metadata["debug"]["rewrite_used"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "llm")
+
+    def test_rewrite_fallback_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        query = "How to setup VPN?"
+        rag = self._rag(analysis, rewrite_error=RuntimeError("rewrite failed"))
+
+        metadata = self._metadata(rag, query=query)
+
+        self.assertTrue(metadata["debug"]["rewrite_attempted"])
+        self.assertFalse(metadata["debug"]["rewrite_used"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "fallback")
+        rag.retriever.search.assert_called_once()
+        self.assertEqual(rag.retriever.search.call_args.args[0], query)
+
+    def test_pattern_b_lite_disabled_uses_sync_path(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        rag = self._rag(analysis, rewrite_return="rewritten vpn setup")
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", False), \
+                patch.object(orchestration, "ThreadPoolExecutor") as executor:
+            metadata = self._metadata(rag)
+
+        executor.assert_not_called()
+        self.assertEqual(metadata["debug"]["rewrite_source"], "llm")
+
+    def test_pattern_b_lite_cache_hit_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        rag = self._rag(analysis, cached_answer="cached answer", rewrite_return="rewritten vpn setup")
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag)
+
+        self.assertTrue(metadata["debug"]["cache_hit"])
+        self.assertEqual(metadata["debug"]["route"], "cache_hit")
+        rag.retriever.search.assert_not_called()
+        rag.generator.generate.assert_not_called()
+
+    def test_pattern_b_lite_rewrite_cache_hit_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        rag = self._rag(analysis, rewritten="rewritten vpn setup")
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag)
+
+        self.assertEqual(metadata["debug"]["rewrite_source"], "cache_hit")
+        self.assertEqual(rag.retriever.search.call_args.args[0], "rewritten vpn setup")
+
+    def test_pattern_b_lite_llm_rewrite_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        rag = self._rag(analysis, rewrite_return="rewritten vpn setup")
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag)
+
+        self.assertEqual(metadata["debug"]["rewrite_source"], "llm")
+        self.assertEqual(rag.retriever.search.call_args.args[0], "rewritten vpn setup")
+
+    def test_pattern_b_lite_rewrite_error_fallback_metadata(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        query = "How to setup VPN?"
+        rag = self._rag(analysis, rewrite_error=RuntimeError("rewrite failed"))
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag, query=query)
+
+        self.assertEqual(metadata["debug"]["rewrite_source"], "fallback")
+        self.assertEqual(rag.retriever.search.call_args.args[0], query)
+
+    def test_pattern_b_lite_cache_error_still_retrieves(self):
+        analysis = QueryAnalysis(intent="technical", complexity_score=0.5, ambiguity_score=0.1, entities=[])
+        cache = _CacheWithGenerationError()
+        rag = self._rag(analysis, rewrite_return="rewritten vpn setup", cache=cache)
+
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag)
+
+        self.assertFalse(metadata["debug"]["cache_hit"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "llm")
+        self.assertGreaterEqual(metadata["timings_ms"]["generation_cache_check_ms"], 0.0)
+        rag.retriever.search.assert_called_once()
 
     def test_multi_topic_metadata(self):
         analysis = QueryAnalysis(intent="technical", complexity_score=0.85, ambiguity_score=0.1, entities=[])
         rag = self._rag(analysis)
         rag._decompose_query = MagicMock(return_value=["VPN?", "Docker?"])
 
-        metadata = self._metadata(rag, query="How to setup VPN? How to setup Docker?")
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag, query="How to setup VPN? How to setup Docker?")
 
         self.assertTrue(metadata["debug"]["is_multi_topic"])
+        self.assertEqual(metadata["debug"]["rewrite_source"], "skip")
         self.assertEqual(metadata["debug"]["route"], "technical_multi_topic")
         self.assertGreaterEqual(metadata["timings_ms"]["retrieval_ms"], 0.0)
 
@@ -143,11 +252,16 @@ class TestOrchestrationTiming(unittest.TestCase):
         analysis = QueryAnalysis(intent="general", complexity_score=0.1, ambiguity_score=0.0, entities=[])
         rag = self._rag(analysis)
 
-        metadata = self._metadata(rag, query="Xin chao")
+        with patch.object(orchestration, "RAG_PATTERN_B_LITE", True):
+            metadata = self._metadata(rag, query="Xin chao")
 
         self.assertEqual(metadata["debug"]["intent"], "general")
         self.assertEqual(metadata["debug"]["route"], "general")
+        self.assertEqual(metadata["debug"]["rewrite_source"], "skip")
         self.assertEqual(metadata["timings_ms"]["cache_lookup_ms"], 0.0)
+        self.assertEqual(metadata["timings_ms"]["embedding_ms"], 0.0)
+        self.assertEqual(metadata["timings_ms"]["generation_cache_check_ms"], 0.0)
+        self.assertEqual(metadata["timings_ms"]["rewrite_ms"], 0.0)
         self.assertEqual(metadata["timings_ms"]["retrieval_ms"], 0.0)
         self.assertEqual(rag.cache.embedding_calls, 0)
 

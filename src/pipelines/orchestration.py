@@ -2,6 +2,7 @@ import os
 import re
 import time
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import cohere
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
@@ -23,12 +24,15 @@ from src.utils.pii_scrubber import scrub
 
 IS_EVAL_MODE = os.getenv("EVAL_MODE", "false").lower() == "true"
 RAG_TIMING_LOGS = os.getenv("RAG_TIMING_LOGS", "true").lower() == "true"
+RAG_PATTERN_B_LITE = os.getenv("RAG_PATTERN_B_LITE", "false").lower() == "true"
 logger = logging.getLogger(__name__)
 
 
 def _empty_timings() -> dict:
     return {
         "analyzer_ms": 0.0,
+        "embedding_ms": 0.0,
+        "generation_cache_check_ms": 0.0,
         "cache_lookup_ms": 0.0,
         "rewrite_ms": 0.0,
         "retrieval_ms": 0.0,
@@ -142,6 +146,73 @@ class ProductionRAG:
             f"User: {m['user']}\nBot: {m['bot']}" for m in history
         )
 
+    def _lookup_generation_cache(self, query: str, profile, timings: dict, debug: dict, session_id: str):
+        cache_stage_start = time.perf_counter()
+        stage_start = time.perf_counter()
+        try:
+            query_embedding = self.cache.get_embedding(query)
+        except Exception as e:
+            logger.warning(f"  ⚠️ [Cache_ERROR] Embedding: {e}")
+            query_embedding = None
+
+        if query_embedding is None:
+            query_embedding = self.dense_model.encode(query).tolist()
+            try:
+                self.cache.store_embedding(query, query_embedding)
+            except Exception:
+                pass
+        timings["embedding_ms"] = _elapsed_ms(stage_start)
+
+        cached_answer = None
+        if not IS_EVAL_MODE:
+            stage_start = time.perf_counter()
+            try:
+                cached_answer = self.cache.check_generation(
+                    query_embedding,
+                    min_tier=profile.tier,
+                )
+                timings["generation_cache_check_ms"] = _elapsed_ms(stage_start)
+                if cached_answer:
+                    debug["cache_hit"] = True
+                    logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
+            except Exception as e:
+                timings["generation_cache_check_ms"] = _elapsed_ms(stage_start)
+                logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
+
+        timings["cache_lookup_ms"] = _elapsed_ms(cache_stage_start)
+        return query_embedding, cached_answer
+
+    def _rewrite_query(self, query: str, analysis, history_str: str, profile, timings: dict, debug: dict) -> str:
+        if profile.skip_rewrite:
+            timings["rewrite_ms"] = 0.0
+            debug["rewrite_source"] = "skip"
+            debug["rewrite_used"] = False
+            return query
+
+        debug["rewrite_attempted"] = True
+        stage_start = time.perf_counter()
+        try:
+            search_query = self.cache.get_rewrite(query)
+        except Exception:
+            search_query = None
+
+        if search_query is None:
+            try:
+                search_query = self.rewriter.rewrite(query, analysis, history_str)
+                debug["rewrite_source"] = "llm"
+                self.cache.store_rewrite(query, search_query)
+            except Exception as e:
+                logger.error(f"[GROQ_ERROR] Rewrite failed: {e}")
+                search_query = query
+                debug["rewrite_source"] = "fallback"
+        else:
+            debug["rewrite_source"] = "cache_hit"
+            logger.info(f"  [RewriteCache] HIT → '{search_query[:60]}'")
+
+        timings["rewrite_ms"] = _elapsed_ms(stage_start)
+        debug["rewrite_used"] = bool(search_query and search_query.strip() != query.strip())
+        return search_query
+
     # ── Multi-topic Helpers ───────────────────────────────────────────────────
 
     def _is_multi_topic(self, query: str, analysis) -> bool:
@@ -216,6 +287,7 @@ CÂU HỎI GỐC: {query}"""
             "cache_hit": False,
             "rewrite_attempted": False,
             "rewrite_used": False,
+            "rewrite_source": "skip",
             "is_multi_topic": False,
             "route": "unknown",
             "top_k": None,
@@ -238,7 +310,7 @@ CÂU HỎI GỐC: {query}"""
             if RAG_TIMING_LOGS:
                 logger.info(
                     "[RAG_TIMING] session=%s route=%s intent=%s cache_hit=%s "
-                    "rewrite_attempted=%s rewrite_used=%s is_multi_topic=%s "
+                    "rewrite_attempted=%s rewrite_used=%s rewrite_source=%s is_multi_topic=%s "
                     "top_k=%s model=%s timings=%s",
                     session_id,
                     debug["route"],
@@ -246,6 +318,7 @@ CÂU HỎI GỐC: {query}"""
                     debug["cache_hit"],
                     debug["rewrite_attempted"],
                     debug["rewrite_used"],
+                    debug["rewrite_source"],
                     debug["is_multi_topic"],
                     debug["top_k"],
                     debug["model_name"],
@@ -334,40 +407,50 @@ CÂU HỎI GỐC: {query}"""
                 }
 
             # Stage 1 — try embedding cache
-            stage_start = time.perf_counter()
-            try:
-                query_embedding = self.cache.get_embedding(query)
-            except Exception as e:
-                logger.warning(f"  ⚠️ [Cache_ERROR] Embedding: {e}")
-                query_embedding = None
+            pattern_b_eligible = (
+                RAG_PATTERN_B_LITE
+                and analysis.intent == "technical"
+                and not is_multi
+                and not profile.skip_rewrite
+            )
+            search_query = None
 
-            if query_embedding is None:
-                query_embedding = self.dense_model.encode(query).tolist()
-                try:
-                    self.cache.store_embedding(query, query_embedding)
-                except Exception:
-                    pass
-
-            # Stage 2 — try generation cache
-            if not IS_EVAL_MODE:
-                try:
-                    cached_answer = self.cache.check_generation(
-                        query_embedding, 
-                        min_tier=profile.tier
+            if pattern_b_eligible:
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    cache_future = executor.submit(
+                        self._lookup_generation_cache,
+                        query,
+                        profile,
+                        timings,
+                        debug,
+                        session_id,
                     )
-                    if cached_answer:
-                        timings["cache_lookup_ms"] = _elapsed_ms(stage_start)
-                        debug["cache_hit"] = True
-                        logger.info(f"  ⚡ [PreRetrievalCache] HIT ({session_id}) tier={profile.tier}")
-                        return {
-                            "answer": cached_answer,
-                            "context": "⚡ Pre-Retrieval Cache Hit",
-                            "metadata": finish_metadata("cache_hit")
-                        }
-                except Exception as e:
-                    logger.warning(f"  ⚠️ [Cache_ERROR] GenCache: {e}")
+                    rewrite_future = executor.submit(
+                        self._rewrite_query,
+                        query,
+                        analysis,
+                        history_str,
+                        profile,
+                        timings,
+                        debug,
+                    )
+                    query_embedding, cached_answer = cache_future.result()
+                    search_query = rewrite_future.result()
+            else:
+                query_embedding, cached_answer = self._lookup_generation_cache(
+                    query,
+                    profile,
+                    timings,
+                    debug,
+                    session_id,
+                )
 
-            timings["cache_lookup_ms"] = _elapsed_ms(stage_start)
+            if cached_answer:
+                return {
+                    "answer": cached_answer,
+                    "context": "⚡ Pre-Retrieval Cache Hit",
+                    "metadata": finish_metadata("cache_hit")
+                }
 
             if analysis.intent == "general":
                 debug["route"] = "general"
@@ -426,28 +509,8 @@ CÂU HỎI GỐC: {query}"""
                 else:
                     debug["route"] = "technical_single_topic"
                     n_topics = 1
-                    if profile.skip_rewrite:
-                        search_query = query
-                    else:
-                        debug["rewrite_attempted"] = True
-                        stage_start = time.perf_counter()
-                        try:
-                            search_query = self.cache.get_rewrite(query)
-                        except Exception:
-                            search_query = None
-
-                        if search_query is None:
-                            try:
-                                search_query = self.rewriter.rewrite(query, analysis, history_str)
-                                self.cache.store_rewrite(query, search_query)
-                            except Exception as e:
-                                logger.error(f"[GROQ_ERROR] Rewrite failed: {e}")
-                                search_query = query # Fallback to original
-                        else:
-                            logger.info(f"  [RewriteCache] HIT → '{search_query[:60]}'")
-
-                    timings["rewrite_ms"] = _elapsed_ms(stage_start) if not profile.skip_rewrite else 0.0
-                    debug["rewrite_used"] = bool(search_query and search_query.strip() != query.strip())
+                    if search_query is None:
+                        search_query = self._rewrite_query(query, analysis, history_str, profile, timings, debug)
 
                     stage_start = time.perf_counter()
                     try:
